@@ -1,0 +1,40 @@
+# Local project state and backups
+.local-backup/
+CONTEXT.md
+.codex-*/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+**/__pycache__/
+*.py[cod]
+
+# Server dependencies, builds, and private runtime data
+server/node_modules/
+server/dist/
+server/data/
+server/.env
+server/.env.*
+!server/.env.example
+
+# Firmware build caches and generated dependencies
+**/build/
+**/managed_components/
+**/sdkconfig
+**/sdkconfig.old
+
+# Local credentials for the official-platform experiment
+netease-official-firmware/config/netease_secrets.h
+netease-official-firmware/config/*.pem
+netease-official-firmware/config/*.key
+
+# Host-test binaries
+firmware/ai-passport/tests/*.exe
+netease-official-firmware/firmware/ai-passport/tests/*.exe

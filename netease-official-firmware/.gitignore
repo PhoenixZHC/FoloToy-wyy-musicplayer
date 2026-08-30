@@ -1,0 +1,7 @@
+firmware/ai-passport/build/
+firmware/ai-passport/sdkconfig
+firmware/ai-passport/sdkconfig.old
+firmware/ai-passport/managed_components/
+config/netease_secrets.h
+config/*.pem
+*.exe

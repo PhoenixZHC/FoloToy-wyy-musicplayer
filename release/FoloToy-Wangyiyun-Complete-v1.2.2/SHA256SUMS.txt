@@ -1,0 +1,2 @@
+148e9891100fab5e078fcd755f558389f89b6560cd01e418c04e38d34abba602  firmware/FoloToy-Wangyiyun-full-8MB.bin
+a83b642ce67dcd9c71a4e1b9fb9f0c40e1f6fd11a04a46d10532a0a7cf92e608  server/FoloToy-Wangyiyun-Relay-Windows-x64-v1.2.2.zip

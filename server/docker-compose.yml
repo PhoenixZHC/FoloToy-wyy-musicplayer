@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      DATABASE_PATH: /data/app.db
+      NETEASE_API_BASE_URL: http://netease-api:3000
+    ports:
+      - "8080:8080"
+    volumes:
+      - app-data:/data
+    depends_on:
+      - netease-api
+    restart: unless-stopped
+
+  netease-api:
+    image: binaryify/netease_cloud_music_api:latest
+    restart: unless-stopped
+
+volumes:
+  app-data:
