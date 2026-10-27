@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -84,3 +85,8 @@ size_t device_music_ui_screen_count(void);
 const device_music_ui_screen_spec_t *device_music_ui_screen(device_music_screen_t screen);
 int device_music_ui_progress_percent(int elapsed_ms, int duration_ms);
 int device_music_ui_progress_width(int track_width, int progress_percent);
+
+unsigned device_music_ui_signal_level(bool connected, bool valid, int rssi_dbm);
+void device_music_ui_set_night(bool night);
+bool device_music_ui_is_night(void);
+void device_music_ui_format_key_hint(char *out, size_t size, unsigned key, const char *action);

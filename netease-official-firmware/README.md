@@ -1,3 +1,5 @@
+> 历史实验目录，不是当前正式方案。Folo Music 2.0 使用开源协议设备直连，见[产品入口](../README.md)；不再推进官方设备参数方案。
+
 # FoloToy NetEase Official Firmware
 
 This directory contains a separate ESP32-C3 firmware build that talks to the

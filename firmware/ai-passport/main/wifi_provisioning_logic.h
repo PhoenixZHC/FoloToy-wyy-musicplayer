@@ -36,3 +36,19 @@ wifi_provisioning_station_action_t wifi_provisioning_station_action(bool station
                                                                     bool has_ip,
                                                                     const char *current_ssid,
                                                                     const char *requested_ssid);
+bool wifi_provisioning_password_is_valid(const char *password);
+
+#define WIFI_PASSWORD_CAPACITY 64
+typedef struct {
+    char text[WIFI_PASSWORD_CAPACITY + 1];
+    unsigned group;
+    unsigned character;
+    bool visible;
+} wifi_password_editor_t;
+void wifi_password_editor_init(wifi_password_editor_t *editor);
+void wifi_password_editor_move(wifi_password_editor_t *editor, int direction, bool group);
+char wifi_password_editor_candidate(const wifi_password_editor_t *editor);
+const char *wifi_password_editor_group(const wifi_password_editor_t *editor);
+const char *wifi_password_editor_characters(const wifi_password_editor_t *editor);
+bool wifi_password_editor_add(wifi_password_editor_t *editor);
+void wifi_password_editor_delete(wifi_password_editor_t *editor);

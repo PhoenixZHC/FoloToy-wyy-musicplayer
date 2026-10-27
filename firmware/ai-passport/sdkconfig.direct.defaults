@@ -1,0 +1,18 @@
+CONFIG_NETEASE_DIRECT=y
+# CONFIG_BT_ENABLED is not set
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# Allocate TLS records on demand instead of retaining maximum-size RX/TX
+# buffers together throughout the handshake. Preserve full-size TLS records.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+# Retain full-size incoming records on the reusable API transport. Outgoing
+# HTTP headers keep their separate 4 KiB buffer; ESP-TLS fragments their writes.
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
+CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=1024
+# Verification still runs; release the peer certificate only after handshake.
+# CONFIG_MBEDTLS_SSL_KEEP_PEER_CERTIFICATE is not set
+# C3 has no PSRAM: leave internal RAM for simultaneous API TLS and MP3 decode.
+# Six static RX buffers match the default six-frame RX BA window.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=12
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=12

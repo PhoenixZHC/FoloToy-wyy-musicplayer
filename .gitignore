@@ -1,6 +1,6 @@
 # Local project state and backups
 .local-backup/
-CONTEXT.md
+/CONTEXT.md
 .codex-*/
 
 # Editors and operating systems
@@ -25,6 +25,7 @@ server/.env.*
 !server/.env.example
 
 # Firmware build caches and generated dependencies
+/release/FoloMusic-v*/
 **/build/
 **/managed_components/
 **/sdkconfig

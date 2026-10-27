@@ -1,25 +1,37 @@
 #include "device_music_ui_spec.h"
+#include <stdio.h>
+#include <string.h>
 
-static const device_music_ui_theme_t s_theme = {
-    .width = 240,
-    .height = 320,
-    .background = 0x151821,
-    .top_bar = 0x101216,
-    .footer_bar = 0x101216,
-    .divider = 0x242A35,
-    .card = 0x202637,
-    .error_card = 0x251B22,
-    .text = 0xFFFFFF,
-    .muted_text = 0xC7CEDB,
-    .subtle_text = 0x9CA3AF,
-    .netease_red = 0xE60026,
-    .green = 0x19C37D,
-    .blue = 0x60A5FA,
-    .amber = 0xFBBF24,
-    .danger = 0xEF4444,
-    .footer_y = 268,
-    .footer_h = 52,
+void device_music_ui_format_key_hint(char *out, size_t size, unsigned key, const char *action)
+{
+    static const char *const names[] = {"↑", "OK", "↓"};
+    if (!out || !size) return;
+    if (!action || !action[0] || !strcmp(action, "无") || !strcmp(action, "—") || key >= 3) {
+        snprintf(out, size, "—");
+        return;
+    }
+    snprintf(out, size, "%s %s", names[key], action);
+}
+
+unsigned device_music_ui_signal_level(bool connected, bool valid, int rssi_dbm)
+{
+    if (!connected || !valid) return 0;
+    return rssi_dbm >= -60 ? 3 : rssi_dbm >= -75 ? 2 : 1;
+}
+
+static bool s_night;
+static const device_music_ui_theme_t s_themes[2] = {
+    { .width=240,.height=320,.background=0xF0E9DA,.top_bar=0xF0E9DA,.footer_bar=0xF0E9DA,
+      .divider=0xC3AD91,.card=0xE7DCC9,.error_card=0xE7DCC9,.text=0x3C3026,
+      .muted_text=0x77624C,.subtle_text=0x77624C,.netease_red=0x8E482F,.green=0x465C3B,
+      .blue=0x8E482F,.amber=0x8E482F,.danger=0x8E482F,.footer_y=293,.footer_h=27 },
+    { .width=240,.height=320,.background=0x29251F,.top_bar=0x29251F,.footer_bar=0x29251F,
+      .divider=0x635242,.card=0x373027,.error_card=0x373027,.text=0xE7DDC9,
+      .muted_text=0xBAAC96,.subtle_text=0xBAAC96,.netease_red=0xD4A47B,.green=0xB2BD8B,
+      .blue=0xD4A47B,.amber=0xD4A47B,.danger=0xD4A47B,.footer_y=293,.footer_h=27 }
 };
+void device_music_ui_set_night(bool night) { s_night=night; }
+bool device_music_ui_is_night(void) { return s_night; }
 
 #define RECT(x_, y_, w_, h_) { .x = (x_), .y = (y_), .w = (w_), .h = (h_) }
 #define FOOTER(up_, ok_, down_) { .up_label = (up_), .ok_label = (ok_), .down_label = (down_) }
@@ -31,8 +43,8 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "未配置",
         .chip_color = 0xF59E0B,
-        .title = "连接设备热点",
-        .detail = "手机连接上方设备热点\n浏览器打开 192.168.4.1",
+        .title = "选择 Wi-Fi",
+        .detail = "设备扫描附近网络\n使用三个按键输入密码",
         .main = RECT(16, 100, 208, 84),
         .footer = FOOTER("无", "确认", "无"),
     },
@@ -65,9 +77,9 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .state_chip = "失败",
         .chip_color = 0xEF4444,
         .title = "配置失败",
-        .detail = "Wi-Fi 或服务不可用\n短按重试\n长按清空配置",
+        .detail = "Wi-Fi 或服务不可用\n短按重试\n长按返回",
         .main = RECT(18, 58, 204, 154),
-        .footer = FOOTER("无", "重试", "清空"),
+        .footer = FOOTER("—", "重试", "—"),
     },
     [DEVICE_MUSIC_SCREEN_QR_LOGIN] = {
         .screen = DEVICE_MUSIC_SCREEN_QR_LOGIN,
@@ -75,10 +87,10 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "登录",
         .chip_color = 0xF87171,
-        .title = "扫码登录网易云",
+        .title = "扫码，让音乐进来。",
         .detail = "手机打开网易云音乐扫一扫",
-        .main = RECT(52, 50, 136, 136),
-        .footer = FOOTER("无", "刷新", "清空"),
+        .main = RECT(54, 110, 132, 132),
+        .footer = FOOTER("—", "刷新码", "—"),
     },
     [DEVICE_MUSIC_SCREEN_LOGIN_WAITING] = {
         .screen = DEVICE_MUSIC_SCREEN_LOGIN_WAITING,
@@ -88,8 +100,8 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .chip_color = 0xFBBF24,
         .title = "请在手机上确认登录",
         .detail = "设备会自动刷新状态",
-        .main = RECT(52, 46, 136, 136),
-        .footer = FOOTER("无", "等待", "清空"),
+        .main = RECT(54, 110, 132, 132),
+        .footer = FOOTER("—", "等待确认", "—"),
     },
     [DEVICE_MUSIC_SCREEN_PLAYLISTS] = {
         .screen = DEVICE_MUSIC_SCREEN_PLAYLISTS,
@@ -97,10 +109,10 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "歌单",
         .chip_color = 0xF87171,
-        .title = "选择歌单",
+        .title = "我的歌单",
         .detail = "",
-        .rows = RECT(12, 78, 216, 33),
-        .row_count = 5,
+        .rows = RECT(15, 94, 210, 42),
+        .row_count = 4,
         .footer = FOOTER("上移", "打开", "下移"),
     },
     [DEVICE_MUSIC_SCREEN_TRACKS] = {
@@ -109,10 +121,10 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "歌曲",
         .chip_color = 0xF87171,
-        .title = "每日推荐",
+        .title = "歌曲列表",
         .detail = "",
-        .rows = RECT(12, 78, 216, 33),
-        .row_count = 5,
+        .rows = RECT(15, 94, 210, 42),
+        .row_count = 4,
         .footer = FOOTER("上移", "播放", "下移"),
     },
     [DEVICE_MUSIC_SCREEN_LOADING_TRACK] = {
@@ -132,8 +144,8 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "播放中",
         .chip_color = 0x19C37D,
-        .title = "城市灯光",
-        .detail = "落日飞车 · 128 kbps",
+        .title = "正在播放",
+        .detail = "",
         .main = RECT(58, 78, 118, 54),
         .footer = FOOTER("上一首", "暂停", "下一首"),
     },
@@ -143,7 +155,7 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .app_title = "网易云音乐",
         .state_chip = "暂停",
         .chip_color = 0xFBBF24,
-        .title = "城市灯光",
+        .title = "正在播放",
         .detail = "播放已暂停",
         .main = RECT(72, 58, 96, 96),
         .footer = FOOTER("上一首", "继续", "下一首"),
@@ -155,15 +167,15 @@ static const device_music_ui_screen_spec_t s_screens[DEVICE_MUSIC_SCREEN_COUNT] 
         .state_chip = "失败",
         .chip_color = 0xEF4444,
         .title = "播放失败",
-        .detail = "播放地址不可用\n短按重新登录\n长按清空配置",
+        .detail = "播放地址不可用\n短按重试\n长按返回",
         .main = RECT(18, 58, 204, 154),
-        .footer = FOOTER("无", "重试", "清空"),
+        .footer = FOOTER("—", "重试", "—"),
     },
 };
 
 const device_music_ui_theme_t *device_music_ui_theme(void)
 {
-    return &s_theme;
+    return &s_themes[s_night ? 1 : 0];
 }
 
 size_t device_music_ui_screen_count(void)

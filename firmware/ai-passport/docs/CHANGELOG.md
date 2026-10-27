@@ -6,6 +6,64 @@
 
 ## Unreleased
 
+## 2.0 — 2026-10-28
+
+- Release Folo Music 2.0: open-protocol direct access, on-device Wi-Fi keyboard, NetEase App QR authorization and session restore, Scheme B day/night UI, artwork, lyrics, three-key navigation, caching and simplified Chinese/English fonts. The user reports no new bugs in current testing; systematic long-duration and all network/catalog coverage remain unverified.
+
+- Add a clean exact-8-MiB factory image, app-only upgrade, SHA-256 manifest and packaging regressions. Factory flashing clears settings; app-only upgrades preserve settings only with the matching 7 MiB partition layout. Organize current documentation, archive old deployment/development state and credit open-source authors.
+
+### Implementation history
+
+The following snapshots retain their original candidate results and failures; they are not the current release status. Current acceptance limits are in repository-root docs/releases/v2.0.md.
+
+- Keep the full GB2312 set and add 11 name characters for 6774 Han glyphs in each dynamic UI font, plus all 52 English letters, digits and UI punctuation. The user requested simplified Chinese and English only, so additional traditional and other-language expansion was withdrawn. Verify source coverage, RLE round trips and the 20-bit bitmap-offset limit while retaining line metrics. Set version to 2.0 and remove the playback-order caption and top branding on player/list screens. Direct application: 3,883,184 bytes, leaving 3,456,848 bytes (about 3.30 MiB) in the 7 MiB partition. Font tests (3), host executables (12), native day/night renders (98), both builds and merged-image checks pass. Hardware display and playback concurrency acceptance remain pending.
+
+- Free the first WEAPI AES result before RSA and URL-encode directly into the final request body. A real eight-song encoder regression first failed under a 3072-byte allocation budget, then passed; tracked encoder peak drops from 3187 to 1626 bytes. This excludes shared mbedTLS internal allocations and is not a device heap simulation. The host gate now runs 12 executables, correcting its stale count.
+
+- Restore the SDK-default I2S DMA depth of six 240-frame buffers after hardware reproduced allocation failure with the static TLS RX candidate. Initial stereo DMA payload drops from 16,384 to 5760 bytes; compressed input stays at 8 KiB. Log internal heap before and after audio initialization. Concurrent playback and list loading remain unverified.
+
+- Use ESP-IDF's official post-handshake static-RX strategy on the reusable WEAPI transport, preserving the full 16 KiB incoming record. Direct TLS writes fragment at 1 KiB while HTTP header storage remains 4 KiB; peer certificates are discarded only after verification. The prior short-connection experiment reclaimed 24,104 bytes but still exhausted heap on a fresh handshake and was withdrawn. Static-RX policy regression passes; hardware concurrency acceptance remains pending.
+
+- Add a repeatable PassportSim WASM diagnostic runner. Nine provisioning checks pass in a separate IDF 5.5.3 build only after omitting unsupported esp_wifi_set_ps in a temporary source copy. Production networking/playback acceptance remains blocked; no new firmware is flashed. Reuse same-origin WEAPI connections; rebuild once after an empty-response header failure only for explicit read-only queries. Regression tests exclude EAPI, partial responses and unlimited retries. Playback-time TLS allocation failures remain unresolved. See repository-root docs/loading-validation.md.
+
+- Batch compressed-audio refills below 2 KiB, forcing a read when the decoder needs more input; retain the 8 KiB input capacity and reduce duplicate HTTP RX storage to 1 KiB. Shrink retained lyrics to their actual length. Direct builds budget six static Wi-Fi RX buffers and twelve dynamic RX/TX buffers to leave TLS headroom. Request playlist IDs with n=0 before fetching page metadata. Host checks and direct firmware validation pass; hardware playback/paging and response-size acceptance remain pending.
+
+- Enable dynamic TLS RX/TX buffers in direct builds while retaining the 16 KiB maximum incoming record. Hardware reproduced TLS setup allocation failures during playback even with the smaller audio buffer and retries. Static checks, 10 host executables, direct build, merged-image verification and application flash hash pass; all NVS bytes match. Concurrent playback/list acceptance remains pending after a Wi-Fi authentication timeout at boot.
+
+- Reduce the active audio input buffer from 16 KiB to 8 KiB to leave more memory for metadata HTTPS requests during playback. Retry transient track-request connection and allocation failures twice before showing an error. The application write hash and unchanged NVS were verified; concurrent playback/list loading acceptance remains pending because Wi-Fi authentication timed out after restart.
+
+- Enlarge player lyrics from 10 px to 14 px in a 42 px-high, two-line area. Move track information up and progress controls down to keep lyrics readable without overlapping controls, using the primary theme text color in both modes.
+
+- Add artwork and timed lyrics to the player. Missing artwork, download failures and decode failures leave no placeholder and restore the full text width. Song and artist labels scroll only when wider than their display area. Hardware media and scrolling acceptance remain pending.
+
+- Fetch eight song metadata records per page while keeping four visible rows. The three-page cache and adjacent prefetch now cover a wider window, reducing the visible loading pause when browsing; the direct client retains a 512-ID sliding window without caching audio.
+
+- Hardware validation after the header-buffer fix: account verification, 20-playlist loading, track-page metadata, adjacent prefetch, and three audio URL requests all returned `err=0`; the monitor saw no header warnings, EAGAIN, watchdog, or panic events. Audible output and long-play stability remain user checks.
+
+- Fix direct NetEase HTTPS request headers by using a 4096-byte transmit buffer for both EAPI and WEAPI requests. The previous 1024-byte WEAPI buffer could not hold the maximum session Cookie and emitted incomplete-header warnings; the flashed device now verifies the account and loads 20 playlists successfully.
+
+- Prevent a provisioning-screen freeze caused by LVGL heap exhaustion on the password keyboard: replace per-key widgets with three button-matrix rows. The pointer-width-scaled bounded-heap preview, both firmware builds, host tests and day/night renders pass; the direct app was flashed while preserving NVS. Hardware logs confirm keyboard interaction, connection submission, IP acquisition and successful Wi-Fi connection without new watchdog events; subsequent NetEase HTTP failures remain unresolved.
+
+- Show an on-device password keyboard with QWERTY letters, digits, symbols and space, highlighted selection, day/night themes, masking and length feedback. Use ↑/↓ to move, OK to enter, long ↑/↓ to switch groups and long OK for actions. Direct firmware flashed at 0x10000 with all 24,576 NVS bytes preserved; physical typing and new-network connection acceptance remain pending.
+
+- Replace phone provisioning with device-side 2.4 GHz scanning and three-button password editing (character groups, delete, visibility and validation). Remove SoftAP/HTTP provisioning from production. Preserve saved Wi-Fi until the new connection succeeds and keep the NetEase session. Hidden SSIDs and enterprise authentication are unsupported; relay mode requires existing registration.
+- Reduce track pages to four items and add bounded adjacent-page prefetch; hardware paging and paused-audio memory acceptance remain pending.
+- Show Wi-Fi strength as three bars without a numeric RSSI value. Error screens offer a network-settings shortcut; provisioning failures offer retry and change-network actions. Entering setup preserves saved Wi-Fi and NetEase account data until a new network is submitted.
+
+- Label every active footer action with its physical key (↑ / OK / ↓), in both themes and the HTML prototype; unavailable actions remain dashes. Rebuilt and flashed direct firmware, verified NVS byte preservation, and confirmed saved-login recovery and 20 playlists at boot.
+
+- Scheme B migration in progress: day/night LVGL, browsing/playback snapshots, confirmation menus, bounded metadata/ID caches, expanded Chinese fonts. Also adds first-use welcome and distinct authentication/error states, fixes the first short click after a long press and preserves page cursors. Native preview renders 70 day/night fixtures without missing label glyphs. After explicit approval, the factory partition expands to 7 MiB without moving NVS or PHY data. Both builds and merged-image verification pass. Direct firmware write hashes pass and all 24,576 NVS bytes match before reboot; complete hardware and visual acceptance remain pending.
+
+- Stop the previous audio stream before fetching a new track URL to avoid overlapping decoder/CDN and API TLS memory use on C3. Hardware verified a two-track switch with CDN HTTP 200 and 44.1 kHz MP3 decoding; audible output and longer stability checks remain pending.
+
+- Allow bounded EAPI payloads to include longer real session tokens. Hardware now loads 20 playlists and 15 tracks; audio playback remains unverified.
+
+- Handle playlist responses that exceed the requested limit: validate the entire stream, retain the first 20 entries, and show a `+` in the list count when more entries exist. Saved-login reuse was verified on hardware; playlist/playback acceptance is pending.
+
+- Aligned QR login and EAPI header cookies/origins with the pinned open-source api-enhanced implementation. Real device QR/account verification now succeeds; playlist processing still fails with a size error and is under investigation. Added decrypted-request regression checks and sanitized diagnostics.
+
+- Added an opt-in ESP32-C3 direct NetEase client with QR login, local NVS session storage, streaming playlist/song parsing, CDN URL validation, and Wi-Fi-only provisioning. The relay build remains the default.
+
 - Replaced the Wangyiyun firmware screens with the independent 240x320 device UI: dark music-player layout, hardware-key footer, QR/login/list/player/error screens, generated CJK subset fonts, and a local preview renderer for Figma comparison.
 - Added the standalone Wangyiyun playback path: the firmware can fetch an MP3 URL over HTTP, decode it through `chmorgan/esp-libhelix-mp3`, downmix to mono PCM, and control playback from the NetEase device UI.
 - Allowed a long OK press on the QR-login and confirmation-wait screens to clear saved Wi-Fi/relay registration and return to provisioning even while the QR polling worker is busy.

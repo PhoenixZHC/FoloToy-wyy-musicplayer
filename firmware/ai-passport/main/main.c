@@ -7,6 +7,7 @@
 #include "netease_app.h"
 #include "wifi_provisioning_page.h"
 #include "lvgl.h"
+#include "device_music_ui.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 
@@ -15,10 +16,12 @@ static const char *TAG = "main";
 typedef enum {
     APP_PAGE_CLOUD_SETUP = 0,
     APP_PAGE_NETEASE,
+    APP_PAGE_WELCOME,
 } app_page_t;
 
 static app_page_t s_page;
 static bool s_page_active;
+static lv_obj_t *s_welcome;
 
 static void enter_netease_app(void);
 
@@ -27,7 +30,7 @@ static void close_active_page(void)
     if (!s_page_active) return;
     if (s_page == APP_PAGE_CLOUD_SETUP) {
         wifi_provisioning_page_exit();
-    } else {
+    } else if(s_page==APP_PAGE_NETEASE) {
         netease_app_exit();
     }
     s_page_active = false;
@@ -40,6 +43,7 @@ static void enter_cloud_setup(void)
     s_page_active = true;
     wifi_provisioning_page_set_complete_callback(enter_netease_app);
     wifi_provisioning_page_enter();
+    if(s_welcome) { lv_obj_delete(s_welcome);s_welcome=NULL; }
 }
 
 static void enter_netease_app(void)
@@ -56,7 +60,9 @@ static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
     (void)user;
     if (!bsp_lvgl_lock(500)) return;
 
-    if (s_page == APP_PAGE_CLOUD_SETUP) {
+    if(s_page==APP_PAGE_WELCOME) {
+        if(btn==BSP_BTN_OK && ev==BSP_BTN_CLICK)enter_cloud_setup();
+    } else if (s_page == APP_PAGE_CLOUD_SETUP) {
         wifi_provisioning_page_key(btn, ev);
     } else {
         netease_app_key(btn, ev);
@@ -94,8 +100,13 @@ void app_main(void) {
 
     bool has_cloud_config = wifi_provisioning_page_has_saved_config();
     if (bsp_lvgl_lock(1000)) {
-        if (!has_cloud_config) {
+        if (wifi_provisioning_page_setup_requested()) {
             enter_cloud_setup();
+        } else if (!has_cloud_config) {
+            s_page=APP_PAGE_WELCOME;
+            s_welcome=device_music_ui_create_screen(DEVICE_MUSIC_SCREEN_SETUP);
+            device_music_ui_draw_notice(s_welcome,DEVICE_MUSIC_NOTICE_WELCOME,NULL);
+            lv_screen_load_anim(s_welcome,LV_SCR_LOAD_ANIM_NONE,0,0,true);
         } else {
             enter_netease_app();
         }

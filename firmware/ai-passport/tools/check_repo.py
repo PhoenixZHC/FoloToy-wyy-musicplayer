@@ -27,7 +27,7 @@ ROOT_MARKDOWN_ALLOWLIST = {
     "README.md",
     "README.zh_CN.md",
 }
-DYNAMIC_FONT_SIZES = (10, 14, 18, 24)
+DYNAMIC_FONT_SIZES = (9, 10, 12, 14, 24)
 MIN_DYNAMIC_FONT_CHARACTERS = 3000
 
 
@@ -214,17 +214,19 @@ def check_lvgl_font_config(errors: list[str]) -> None:
 
 def read_sparse_font_characters(path: Path) -> set[str]:
     source = path.read_text(encoding="utf-8")
+    source = re.sub(r"\s*=\s*", " = ", source)
+    source = re.sub(r",\s*", ", ", source)
     unicode_lists = {
-        name: [int(value, 16) for value in re.findall(r"0x([0-9a-f]+)", body, re.I)]
+        name: [int(value, 0) for value in re.findall(r"0[xX][0-9a-fA-F]+|\d+", body)]
         for name, body in re.findall(
-            r"static const uint16_t (unicode_list_\d+)\[\] = \{(.*?)\};",
+            r"static const uint16_t (unicode_list(?:_\d+)?)\[\] = \{(.*?)\};",
             source,
             re.DOTALL,
         )
     }
     cmap_matches = re.findall(
         r"\{\s*\.range_start = (\d+), \.range_length = (\d+),.*?"
-        r"\.unicode_list = (NULL|unicode_list_\d+),.*?\.list_length = (\d+), "
+        r"\.unicode_list = (NULL|unicode_list(?:_\d+)?),.*?\.list_length = (\d+), "
         r"\.type = (LV_FONT_FMT_TXT_CMAP_[A-Z0-9_]+)\s*\}",
         source,
         re.DOTALL,
@@ -279,7 +281,7 @@ def check_device_font_contract(errors: list[str]) -> None:
         elif font_characters != reference_characters:
             errors.append(f"{font_path.relative_to(ROOT)}: dynamic font character set differs")
 
-    if reference_characters is not None and service_characters != reference_characters:
+    if reference_characters is not None and not service_characters.issubset(reference_characters):
         missing = "".join(sorted(service_characters - reference_characters))
         extra = "".join(sorted(reference_characters - service_characters))
         errors.append(

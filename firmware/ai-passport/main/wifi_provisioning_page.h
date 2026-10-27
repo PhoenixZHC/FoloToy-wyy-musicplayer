@@ -4,6 +4,8 @@
 
 #include <stdbool.h>
 
+void wifi_provisioning_page_request_setup(void);
+bool wifi_provisioning_page_setup_requested(void);
 void wifi_provisioning_page_enter(void);
 void wifi_provisioning_page_exit(void);
 void wifi_provisioning_page_key(bsp_btn_t btn, bsp_btn_ev_t ev);

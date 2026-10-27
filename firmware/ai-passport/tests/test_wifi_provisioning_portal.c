@@ -51,6 +51,14 @@ int main(int argc, char **argv)
     assert(strstr(html, "手动输入网络名称") != NULL);
     assert(strstr(html, "重新扫描") != NULL);
     assert(strstr(html, "连接设备") != NULL);
+#ifdef CONFIG_NETEASE_DIRECT
+    assert(strstr(html, "name='cloud_url'") == NULL);
+    assert(strstr(html, "name='registration_code'") == NULL);
+    assert(strstr(html, "扫码登录网易云") != NULL);
+#else
+    assert(strstr(html, "name='cloud_url'") != NULL);
+    assert(strstr(html, "name='registration_code'") != NULL);
+#endif
 
     const char *success_html = wifi_provisioning_success_html();
     assert(success_html != NULL);

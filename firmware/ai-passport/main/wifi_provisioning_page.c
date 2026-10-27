@@ -1,16 +1,13 @@
 #include "wifi_provisioning_page.h"
-
+#include "wifi_provisioning_logic.h"
 #include "device_music_ui.h"
 #include "demo_radio.h"
+#include "bsp_display.h"
 #include "netease_client.h"
-#include "wifi_provisioning_logic.h"
-#include "wifi_provisioning_portal.h"
-
+#include "esp_attr.h"
 #include "esp_event.h"
-#include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "esp_random.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
@@ -18,22 +15,18 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "nvs.h"
-
-#include <ctype.h>
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#ifdef CONFIG_NETEASE_DIRECT
+#define PROV_NAMESPACE "netease_wifi"
+#else
 #define PROV_NAMESPACE "cloud"
-#define PROV_AP_PREFIX "AI-Passport"
-#define PROV_FORM_MAX 1024
+#endif
+#define LOCAL_WIFI_MAX 24
+#define SCAN_RAW_MAX 32
 #define PROV_SSID_LEN 33
 #define PROV_PASSWORD_LEN 65
-#define PROV_REG_CODE_LEN 96
-#define PROV_SCAN_RAW_MAX 32
-#define PROV_SCAN_JSON_MAX 2048
-
 typedef struct {
     char ssid[PROV_SSID_LEN];
     char password[PROV_PASSWORD_LEN];
@@ -42,39 +35,33 @@ typedef struct {
     char device_secret[NETEASE_CLIENT_DEVICE_SECRET_LEN];
     bool registered;
 } provisioning_config_t;
-
-typedef struct {
-    char ssid[PROV_SSID_LEN];
-    char password[PROV_PASSWORD_LEN];
-    char cloud_url[NETEASE_CLIENT_BASE_URL_LEN];
-    char registration_code[PROV_REG_CODE_LEN];
-} provisioning_form_t;
-
+typedef struct { char ssid[33]; wifi_auth_mode_t auth; } local_ap_t;
+typedef enum { PAGE_SCAN, PAGE_SCANNING, PAGE_PASSWORD, PAGE_ACTIONS,
+               PAGE_CONNECTING, PAGE_FAILED, PAGE_READY } local_page_t;
+typedef enum { JOB_NONE, JOB_SCAN, JOB_CONNECT } local_job_t;
 static const char *TAG = "wifi_provisioning";
 static lv_obj_t *s_scr;
 static lv_timer_t *s_timer;
-static httpd_handle_t s_httpd;
-static esp_netif_t *s_ap_netif;
-static esp_netif_t *s_sta_netif;
-static esp_event_handler_instance_t s_wifi_any_handler;
-static esp_event_handler_instance_t s_ip_handler;
 static TaskHandle_t s_worker_task;
-static wifi_provisioning_logic_t s_logic;
-static provisioning_config_t s_config;
-static provisioning_form_t s_pending_form;
-static char s_ap_ssid[32];
-static volatile bool s_wifi_ready;
-static volatile bool s_wifi_started;
-static volatile bool s_has_pending_form;
-static volatile bool s_sta_got_ip;
-static volatile bool s_exit_requested;
-static volatile esp_err_t s_last_error;
-static char s_flow_detail[192];
-static char s_rendered_detail[192];
-static char s_rendered_ap_ssid[32];
-static device_music_screen_t s_rendered_screen = DEVICE_MUSIC_SCREEN_COUNT;
+static portMUX_TYPE s_job_lock = portMUX_INITIALIZER_UNLOCKED;
+static local_job_t s_job;
+static provisioning_config_t s_job_config, s_config, s_attempt;
+static local_page_t s_page;
+static local_ap_t s_aps[LOCAL_WIFI_MAX];
+static size_t s_count, s_selected, s_action;
+static wifi_password_editor_t s_editor;
+static char s_detail[120];
+static bool s_dirty, s_finish_requested;
+static volatile bool s_exit_requested, s_worker_done, s_sta_got_ip;
+static bool s_wifi_ready, s_wifi_started;
+static esp_netif_t *s_sta_netif;
+static esp_event_handler_instance_t s_wifi_handler, s_ip_handler;
 static void (*s_complete_callback)(void);
-
+RTC_NOINIT_ATTR static uint32_t s_setup_requested;
+#define SETUP_REQUEST_MAGIC 0x46575053U
+void wifi_provisioning_page_request_setup(void) { s_setup_requested = SETUP_REQUEST_MAGIC; }
+bool wifi_provisioning_page_setup_requested(void)
+{ return esp_reset_reason() == ESP_RST_SW && s_setup_requested == SETUP_REQUEST_MAGIC; }
 static esp_err_t nvs_read_str(nvs_handle_t nvs, const char *key, char *value, size_t value_len)
 {
     size_t required = value_len;
@@ -108,6 +95,7 @@ static bool load_config(provisioning_config_t *config)
     }
 
     err = nvs_read_str(nvs, "ssid", config->ssid, sizeof(config->ssid));
+#ifndef CONFIG_NETEASE_DIRECT
     if (err == ESP_OK) err = nvs_read_str(nvs, "cloud_url", config->cloud_url, sizeof(config->cloud_url));
     if (err == ESP_OK) err = nvs_read_str(nvs, "device_id", config->device_id, sizeof(config->device_id));
     if (err == ESP_OK) err = nvs_read_str(nvs, "device_secret", config->device_secret, sizeof(config->device_secret));
@@ -116,14 +104,19 @@ static bool load_config(provisioning_config_t *config)
         (void)nvs_get_u8(nvs, "registered", &registered);
         config->registered = registered == 1;
     }
+#endif
     (void)nvs_read_str(nvs, "password", config->password, sizeof(config->password));
     nvs_close(nvs);
 
+#ifdef CONFIG_NETEASE_DIRECT
+    return err == ESP_OK && config->ssid[0] != 0;
+#else
     return err == ESP_OK &&
            wifi_provisioning_has_ready_config(config->cloud_url,
                                               config->device_id,
                                               config->device_secret,
                                               config->registered);
+#endif
 }
 
 static esp_err_t save_config(const provisioning_config_t *config)
@@ -134,702 +127,322 @@ static esp_err_t save_config(const provisioning_config_t *config)
 
     if (err == ESP_OK) err = nvs_set_str(nvs, "ssid", config->ssid);
     if (err == ESP_OK) err = nvs_set_str(nvs, "password", config->password);
+#ifndef CONFIG_NETEASE_DIRECT
     if (err == ESP_OK) err = nvs_set_str(nvs, "cloud_url", config->cloud_url);
     if (err == ESP_OK) err = nvs_set_str(nvs, "device_id", config->device_id);
     if (err == ESP_OK) err = nvs_set_str(nvs, "device_secret", config->device_secret);
     if (err == ESP_OK) err = nvs_set_u8(nvs, "registered", config->registered ? 1 : 0);
+#endif
     if (err == ESP_OK) err = nvs_commit(nvs);
     nvs_close(nvs);
     return err;
 }
 
-static void clear_config(void)
-{
-    nvs_handle_t nvs;
-    if (nvs_open(PROV_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
-        nvs_erase_all(nvs);
-        nvs_commit(nvs);
-        nvs_close(nvs);
-    }
-    memset(&s_config, 0, sizeof(s_config));
-}
 
-static void generate_identity(provisioning_config_t *config)
-{
-    if (config->device_id[0] == '\0') {
-        snprintf(config->device_id, sizeof(config->device_id),
-                 "dev_%08" PRIx32 "%08" PRIx32, esp_random(), esp_random());
-    }
-    if (config->device_secret[0] == '\0') {
-        snprintf(config->device_secret, sizeof(config->device_secret),
-                 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32,
-                 esp_random(), esp_random(), esp_random(), esp_random(),
-                 esp_random(), esp_random(), esp_random(), esp_random());
-    }
-}
-
-static void set_flow_detail(const char *text)
-{
-    copy_limited(s_flow_detail, sizeof(s_flow_detail), text);
-}
-
-static esp_err_t run_netease_smoke_flow(const netease_client_t *client)
-{
-    set_flow_detail("Device registered\nChecking relay flow...");
-
-    esp_err_t err = netease_client_hello(client);
-    if (err != ESP_OK) {
-        set_flow_detail("Device registered\nHello failed");
-        return err;
-    }
-
-    netease_qr_start_t qr = {0};
-    err = netease_client_qr_start(client, &qr);
-    if (err != ESP_OK) {
-        set_flow_detail("Device registered\nQR start failed");
-        return err;
-    }
-
-    netease_qr_status_t qr_status = {0};
-    err = netease_client_qr_status(client, qr.login_id, &qr_status);
-    if (err != ESP_OK) {
-        set_flow_detail("Device registered\nQR status failed");
-        return err;
-    }
-    if (qr_status.state != NETEASE_QR_CONFIRMED) {
-        set_flow_detail("Device registered\nQR not confirmed");
-        return ESP_ERR_INVALID_RESPONSE;
-    }
-
-    netease_playlist_list_t *playlists = calloc(1, sizeof(*playlists));
-    netease_track_list_t *tracks = calloc(1, sizeof(*tracks));
-    if (playlists == NULL || tracks == NULL) {
-        free(playlists);
-        free(tracks);
-        set_flow_detail("Device registered\nNot enough memory");
-        return ESP_ERR_NO_MEM;
-    }
-
-    err = netease_client_get_playlists(client, playlists);
-    if (err == ESP_OK && playlists->count == 0) {
-        err = ESP_ERR_NOT_FOUND;
-    }
-    if (err == ESP_OK) {
-        err = netease_client_get_tracks(client, playlists->items[0].id, 10, 0, tracks);
-    }
-    if (err == ESP_OK && tracks->count == 0) {
-        err = ESP_ERR_NOT_FOUND;
-    }
-
-    netease_track_url_t track_url = {0};
-    if (err == ESP_OK) {
-        err = netease_client_get_track_url(client, tracks->items[0].id, 128000, &track_url);
-    }
-
-    if (err == ESP_OK) {
-        snprintf(s_flow_detail,
-                 sizeof(s_flow_detail),
-                 "Relay flow OK\nPlaylists: %u\nTracks: %u\nTrack URL OK",
-                 (unsigned)playlists->count,
-                 (unsigned)tracks->count);
-    } else {
-        snprintf(s_flow_detail, sizeof(s_flow_detail), "Relay flow failed\n%s", esp_err_to_name(err));
-    }
-
-    free(playlists);
-    free(tracks);
-    return err;
-}
-
-static int hex_value(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
-static void url_decode(char *dst, size_t dst_len, const char *src, size_t src_len)
-{
-    size_t out = 0;
-    for (size_t i = 0; i < src_len && out + 1 < dst_len; i++) {
-        if (src[i] == '+' ) {
-            dst[out++] = ' ';
-        } else if (src[i] == '%' && i + 2 < src_len) {
-            int hi = hex_value(src[i + 1]);
-            int lo = hex_value(src[i + 2]);
-            if (hi >= 0 && lo >= 0) {
-                dst[out++] = (char)((hi << 4) | lo);
-                i += 2;
-            }
-        } else {
-            dst[out++] = src[i];
-        }
-    }
-    dst[out] = '\0';
-}
-
-static void read_form_field(const char *body, const char *key, char *dst, size_t dst_len)
-{
-    dst[0] = '\0';
-    size_t key_len = strlen(key);
-    const char *cursor = body;
-    while (cursor != NULL && *cursor != '\0') {
-        const char *next = strchr(cursor, '&');
-        size_t pair_len = next ? (size_t)(next - cursor) : strlen(cursor);
-        const char *eq = memchr(cursor, '=', pair_len);
-        if (eq != NULL && (size_t)(eq - cursor) == key_len && strncmp(cursor, key, key_len) == 0) {
-            url_decode(dst, dst_len, eq + 1, pair_len - key_len - 1);
-            return;
-        }
-        cursor = next ? next + 1 : NULL;
-    }
-}
-
-static esp_err_t root_get_handler(httpd_req_t *req)
-{
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_send(req, wifi_provisioning_portal_html(), HTTPD_RESP_USE_STRLEN);
-}
-
-static esp_err_t scan_get_handler(httpd_req_t *req)
-{
-    wifi_scan_config_t scan_config = {
-        .show_hidden = false,
-        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-    };
-    esp_err_t err = esp_wifi_scan_start(&scan_config, true);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi scan failed to start: %s", esp_err_to_name(err));
-        httpd_resp_set_status(req, "503 Service Unavailable");
-        return httpd_resp_send(req, "scan unavailable", HTTPD_RESP_USE_STRLEN);
-    }
-
-    uint16_t found = 0;
-    err = esp_wifi_scan_get_ap_num(&found);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi scan count failed: %s", esp_err_to_name(err));
-        httpd_resp_set_status(req, "500 Internal Server Error");
-        return httpd_resp_send(req, "scan failed", HTTPD_RESP_USE_STRLEN);
-    }
-
-    uint16_t raw_count = found > PROV_SCAN_RAW_MAX ? PROV_SCAN_RAW_MAX : found;
-    wifi_ap_record_t *records = raw_count > 0 ? calloc(raw_count, sizeof(*records)) : NULL;
-    wifi_provisioning_scan_entry_t *raw_entries =
-        raw_count > 0 ? calloc(raw_count, sizeof(*raw_entries)) : NULL;
-    if (raw_count > 0 && (records == NULL || raw_entries == NULL)) {
-        free(records);
-        free(raw_entries);
-        httpd_resp_set_status(req, "500 Internal Server Error");
-        return httpd_resp_send(req, "out of memory", HTTPD_RESP_USE_STRLEN);
-    }
-
-    if (raw_count > 0) {
-        err = esp_wifi_scan_get_ap_records(&raw_count, records);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Wi-Fi scan results failed: %s", esp_err_to_name(err));
-            free(records);
-            free(raw_entries);
-            httpd_resp_set_status(req, "500 Internal Server Error");
-            return httpd_resp_send(req, "scan failed", HTTPD_RESP_USE_STRLEN);
-        }
-        for (uint16_t index = 0; index < raw_count; index++) {
-            snprintf(raw_entries[index].ssid,
-                     sizeof(raw_entries[index].ssid),
-                     "%s",
-                     (const char *)records[index].ssid);
-            raw_entries[index].rssi = records[index].rssi;
-            raw_entries[index].secure = records[index].authmode != WIFI_AUTH_OPEN;
-        }
-    }
-
-    wifi_provisioning_scan_entry_t visible[WIFI_PROVISIONING_SCAN_MAX_RESULTS] = {0};
-    size_t visible_count = wifi_provisioning_prepare_scan_results(
-        raw_entries,
-        raw_count,
-        visible,
-        WIFI_PROVISIONING_SCAN_MAX_RESULTS);
-    free(records);
-    free(raw_entries);
-
-    char *json = calloc(PROV_SCAN_JSON_MAX, sizeof(*json));
-    if (json == NULL) {
-        httpd_resp_set_status(req, "500 Internal Server Error");
-        return httpd_resp_send(req, "out of memory", HTTPD_RESP_USE_STRLEN);
-    }
-    if (wifi_provisioning_scan_results_json(visible, visible_count, json, PROV_SCAN_JSON_MAX) == 0) {
-        free(json);
-        httpd_resp_set_status(req, "500 Internal Server Error");
-        return httpd_resp_send(req, "scan response too large", HTTPD_RESP_USE_STRLEN);
-    }
-
-    httpd_resp_set_type(req, "application/json; charset=utf-8");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    err = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
-    free(json);
-    return err;
-}
-
-static esp_err_t save_post_handler(httpd_req_t *req)
-{
-    if (req->content_len <= 0 || req->content_len >= PROV_FORM_MAX) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad form");
-        return ESP_FAIL;
-    }
-
-    char body[PROV_FORM_MAX] = {0};
-    int received = 0;
-    while (received < req->content_len) {
-        int chunk = httpd_req_recv(req, body + received, req->content_len - received);
-        if (chunk <= 0) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "read failed");
-            return ESP_FAIL;
-        }
-        received += chunk;
-    }
-    body[received] = '\0';
-
-    provisioning_form_t form = {0};
-    read_form_field(body, "ssid", form.ssid, sizeof(form.ssid));
-    read_form_field(body, "password", form.password, sizeof(form.password));
-    read_form_field(body, "cloud_url", form.cloud_url, sizeof(form.cloud_url));
-    read_form_field(body, "registration_code", form.registration_code, sizeof(form.registration_code));
-
-    if (!wifi_provisioning_can_submit(form.ssid, form.cloud_url, form.registration_code)) {
-        httpd_resp_send_err(req,
-                            HTTPD_400_BAD_REQUEST,
-                            "invalid setup data; use the computer Wi-Fi IP for Relay URL, not 192.168.4.x");
-        return ESP_FAIL;
-    }
-
-    s_pending_form = form;
-    s_has_pending_form = true;
-    if (s_worker_task != NULL) {
-        xTaskNotifyGive(s_worker_task);
-    }
-
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_send(req, wifi_provisioning_success_html(), HTTPD_RESP_USE_STRLEN);
-}
-
-static esp_err_t start_http_server(void)
-{
-    if (s_httpd != NULL) {
-        return ESP_OK;
-    }
-
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = 80;
-    esp_err_t err = httpd_start(&s_httpd, &config);
-    if (err != ESP_OK) {
-        s_httpd = NULL;
-        return err;
-    }
-
-    httpd_uri_t root = {
-        .uri = "/",
-        .method = HTTP_GET,
-        .handler = root_get_handler,
-    };
-    httpd_uri_t save = {
-        .uri = "/save",
-        .method = HTTP_POST,
-        .handler = save_post_handler,
-    };
-    httpd_uri_t scan = {
-        .uri = "/scan",
-        .method = HTTP_GET,
-        .handler = scan_get_handler,
-    };
-    err = httpd_register_uri_handler(s_httpd, &root);
-    if (err == ESP_OK) err = httpd_register_uri_handler(s_httpd, &scan);
-    if (err == ESP_OK) err = httpd_register_uri_handler(s_httpd, &save);
-    return err;
-}
-
-static void stop_http_server(void)
-{
-    if (s_httpd != NULL) {
-        httpd_stop(s_httpd);
-        s_httpd = NULL;
-    }
-}
-
-static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
+static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
-    (void)data;
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         s_sta_got_ip = false;
+        const wifi_event_sta_disconnected_t *event = data;
+        ESP_LOGW(TAG, "Local Wi-Fi disconnected; reason=%u", event ? (unsigned)event->reason : 0);
     }
-}
-
-static void ip_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    (void)arg;
-    (void)base;
-    (void)data;
-    if (id == IP_EVENT_STA_GOT_IP) {
+    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         s_sta_got_ip = true;
+        ESP_LOGI(TAG, "Local Wi-Fi received IP");
     }
 }
-
-static esp_err_t ensure_wifi_started(void)
+static esp_err_t start_wifi(void)
 {
-    if (s_wifi_started) {
-        return ESP_OK;
-    }
-
+    if (s_wifi_started) return ESP_OK;
     esp_err_t err = demo_radio_nvs_prepare();
     if (err != ESP_OK) return err;
     err = demo_radio_network_prepare();
     if (err != ESP_OK) return err;
-
-    s_ap_netif = esp_netif_create_default_wifi_ap();
-    s_sta_netif = esp_netif_create_default_wifi_sta();
-    if (s_ap_netif == NULL || s_sta_netif == NULL) {
-        return ESP_ERR_NO_MEM;
+    if (!s_sta_netif) s_sta_netif = esp_netif_create_default_wifi_sta();
+    if (!s_sta_netif) return ESP_ERR_NO_MEM;
+    if (!s_wifi_ready) {
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        err = esp_wifi_init(&cfg);
+        if (err != ESP_OK) return err;
+        s_wifi_ready = true;
     }
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    err = esp_wifi_init(&cfg);
-    if (err != ESP_OK) return err;
-    s_wifi_ready = true;
-
-    err = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                              wifi_event_handler, NULL, &s_wifi_any_handler);
-    if (err != ESP_OK) return err;
-    err = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                              ip_event_handler, NULL, &s_ip_handler);
-    if (err != ESP_OK) return err;
-
-    uint32_t suffix = esp_random() & 0xffff;
-    snprintf(s_ap_ssid, sizeof(s_ap_ssid), "%s-%04" PRIX32, PROV_AP_PREFIX, suffix);
-
-    wifi_config_t ap_config = {0};
-    copy_limited((char *)ap_config.ap.ssid, sizeof(ap_config.ap.ssid), s_ap_ssid);
-    ap_config.ap.ssid_len = strlen(s_ap_ssid);
-    ap_config.ap.channel = 1;
-    ap_config.ap.max_connection = 2;
-    ap_config.ap.authmode = WIFI_AUTH_OPEN;
-
-    err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    if (err != ESP_OK) return err;
-    err = esp_wifi_set_mode(WIFI_MODE_APSTA);
-    if (err != ESP_OK) return err;
-    err = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
-    if (err != ESP_OK) return err;
-    err = esp_wifi_start();
-    if (err != ESP_OK) return err;
-
-    s_wifi_started = true;
-    return start_http_server();
-}
-
-static esp_err_t connect_station(const char *ssid, const char *password)
-{
-    if (ssid == NULL || ssid[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    wifi_ap_record_t current_ap = {0};
-    esp_err_t ap_info_err = esp_wifi_sta_get_ap_info(&current_ap);
-    if (ap_info_err != ESP_OK && ap_info_err != ESP_ERR_WIFI_NOT_CONNECT) {
-        return ap_info_err;
-    }
-
-    wifi_provisioning_station_action_t station_action =
-        wifi_provisioning_station_action(ap_info_err == ESP_OK,
-                                         s_sta_got_ip,
-                                         (const char *)current_ap.ssid,
-                                         ssid);
-    if (station_action == WIFI_PROVISIONING_STA_REUSE) {
-        ESP_LOGI(TAG, "Reusing existing Wi-Fi connection: %s", ssid);
-        return ESP_OK;
-    }
-    if (station_action == WIFI_PROVISIONING_STA_RECONNECT) {
-        ESP_LOGI(TAG, "Disconnecting current Wi-Fi before reconnecting: %s", ssid);
-        s_sta_got_ip = false;
-        esp_err_t err = esp_wifi_disconnect();
-        if (err != ESP_OK) {
-            return err;
-        }
-    }
-
-    wifi_config_t sta_config = {0};
-    copy_limited((char *)sta_config.sta.ssid, sizeof(sta_config.sta.ssid), ssid);
-    copy_limited((char *)sta_config.sta.password, sizeof(sta_config.sta.password), password);
-    sta_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
-    sta_config.sta.pmf_cfg.capable = true;
-    sta_config.sta.pmf_cfg.required = false;
-
-    s_sta_got_ip = false;
-    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
-    if (err != ESP_OK) return err;
-    err = esp_wifi_connect();
-    if (err != ESP_OK) return err;
-
-    for (int i = 0; i < 200; i++) {
-        if (s_sta_got_ip) {
-            return ESP_OK;
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    return ESP_ERR_TIMEOUT;
-}
-
-static void stop_wifi(void)
-{
-    stop_http_server();
-    if (s_wifi_ready) {
-        esp_wifi_disconnect();
-        esp_wifi_stop();
-        esp_wifi_deinit();
-        s_wifi_ready = false;
-        s_wifi_started = false;
-    }
-    if (s_wifi_any_handler) {
-        esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, s_wifi_any_handler);
-        s_wifi_any_handler = NULL;
-    }
-    if (s_ip_handler) {
-        esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, s_ip_handler);
-        s_ip_handler = NULL;
-    }
-    if (s_ap_netif) {
-        esp_netif_destroy_default_wifi(s_ap_netif);
-        s_ap_netif = NULL;
-    }
-    if (s_sta_netif) {
-        esp_netif_destroy_default_wifi(s_sta_netif);
-        s_sta_netif = NULL;
-    }
-}
-
-static esp_err_t register_device(const provisioning_form_t *form)
-{
-    provisioning_config_t next = s_config;
-    set_flow_detail("");
-    copy_limited(next.ssid, sizeof(next.ssid), form->ssid);
-    copy_limited(next.password, sizeof(next.password), form->password);
-    copy_limited(next.cloud_url, sizeof(next.cloud_url), form->cloud_url);
-    generate_identity(&next);
-    next.registered = false;
-    esp_err_t err = save_config(&next);
-    if (err != ESP_OK) return err;
-
-    if (next.ssid[0] != '\0') {
-        err = connect_station(next.ssid, next.password);
+    if (!s_wifi_handler) {
+        err = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL, &s_wifi_handler);
         if (err != ESP_OK) return err;
     }
-
-    netease_client_t client = {0};
-    netease_client_config_t client_config = {
-        .base_url = next.cloud_url,
-        .device_id = next.device_id,
-        .device_secret = next.device_secret,
-        .timeout_ms = 10000,
-    };
-    err = netease_client_init(&client, &client_config);
-    if (err != ESP_OK) return err;
-    err = netease_client_register_device(&client, "AI-Passport", form->registration_code);
-    if (err != ESP_OK) return err;
-
-    next.registered = true;
-    err = save_config(&next);
-    if (err == ESP_OK) {
-        s_config = next;
+    if (!s_ip_handler) {
+        err = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, NULL, &s_ip_handler);
+        if (err != ESP_OK) return err;
     }
-    if (err == ESP_OK && wifi_provisioning_should_run_mock_smoke(next.ssid)) {
-        err = run_netease_smoke_flow(&client);
-    } else if (err == ESP_OK) {
-        set_flow_detail("Device registered\nPress OK to continue");
-    }
+    (void)esp_wifi_set_ps(WIFI_PS_NONE);
+    err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    if (err == ESP_OK) err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err == ESP_OK) err = esp_wifi_start();
+    if (err == ESP_OK) s_wifi_started = true;
     return err;
 }
-
-static void worker_task(void *arg)
+static void stop_wifi(void)
+{
+    if (s_wifi_handler) { esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, s_wifi_handler); s_wifi_handler = NULL; }
+    if (s_ip_handler) { esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, s_ip_handler); s_ip_handler = NULL; }
+    if (s_wifi_ready) {
+        if (s_wifi_started) { (void)esp_wifi_disconnect(); (void)esp_wifi_stop(); }
+        (void)esp_wifi_deinit(); s_wifi_ready = s_wifi_started = false;
+    }
+    if (s_sta_netif) { esp_netif_destroy_default_wifi(s_sta_netif); s_sta_netif = NULL; }
+    s_sta_got_ip = false;
+}
+static esp_err_t scan_networks(local_ap_t *aps, size_t *count)
+{
+    *count = 0;
+    wifi_ap_record_t *raw = calloc(SCAN_RAW_MAX, sizeof(*raw));
+    if (!raw) return ESP_ERR_NO_MEM;
+    wifi_scan_config_t cfg = { .show_hidden = false, .scan_type = WIFI_SCAN_TYPE_ACTIVE };
+    esp_err_t err = esp_wifi_scan_start(&cfg, true);
+    if (err == ESP_OK) {
+        uint16_t found = SCAN_RAW_MAX;
+        err = esp_wifi_scan_get_ap_records(&found, raw);
+        if (err == ESP_OK) {
+            for (unsigned i = 0; i < found && *count < LOCAL_WIFI_MAX; ++i) {
+                if (!raw[i].ssid[0]) continue;
+                bool duplicate = false;
+                for (size_t j = 0; j < *count; ++j)
+                    if (aps[j].auth == raw[i].authmode && !strcmp(aps[j].ssid, (char *)raw[i].ssid)) duplicate = true;
+                if (!duplicate) {
+                    memcpy(aps[*count].ssid, raw[i].ssid, 32);
+                    aps[*count].ssid[32] = 0;
+                    aps[(*count)++].auth = raw[i].authmode;
+                }
+            }
+        }
+    }
+    free(raw);
+    return err;
+}
+static esp_err_t connect_network(const provisioning_config_t *config)
+{
+    (void)esp_wifi_disconnect();
+    s_sta_got_ip = false;
+    wifi_config_t wifi = {0};
+    /* Preserve full 32-byte SSIDs and 64-digit hexadecimal PSKs. */
+    memcpy(wifi.sta.ssid, config->ssid, strlen(config->ssid));
+    memcpy(wifi.sta.password, config->password, strlen(config->password));
+    wifi.sta.pmf_cfg.capable = true;
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &wifi);
+    if (err == ESP_OK) err = esp_wifi_connect();
+    if (err != ESP_OK) return err;
+    for (int i = 0; i < 200 && !s_exit_requested; ++i) {
+        if (s_sta_got_ip) return ESP_OK;
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return s_exit_requested ? ESP_ERR_INVALID_STATE : ESP_ERR_TIMEOUT;
+}
+static bool publish_lock(void)
+{
+    while (!s_exit_requested) if (bsp_lvgl_lock(100)) {
+        if (!s_exit_requested) return true;
+        bsp_lvgl_unlock();
+    }
+    return false;
+}
+static void worker(void *arg)
 {
     (void)arg;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        if (s_exit_requested) {
-            break;
+        if (s_exit_requested) break;
+        portENTER_CRITICAL(&s_job_lock);
+        local_job_t job = s_job;
+        provisioning_config_t config = s_job_config;
+        s_job = JOB_NONE;
+        portEXIT_CRITICAL(&s_job_lock);
+        if (job == JOB_NONE) continue;
+        ESP_LOGI(TAG, "Local Wi-Fi job started: %s", job == JOB_SCAN ? "scan" : "connect");
+        esp_err_t err = start_wifi();
+        local_ap_t found[LOCAL_WIFI_MAX] = {0}; size_t count = 0;
+        if (err == ESP_OK && job == JOB_SCAN) err = scan_networks(found, &count);
+        if (err == ESP_OK && job == JOB_CONNECT) {
+            err = connect_network(&config);
+#ifndef CONFIG_NETEASE_DIRECT
+            if (err == ESP_OK && !wifi_provisioning_has_ready_config(config.cloud_url,
+                    config.device_id, config.device_secret, config.registered)) err = ESP_ERR_NOT_SUPPORTED;
+#endif
+            if (err == ESP_OK && !s_exit_requested) err = save_config(&config);
         }
-        if (!s_wifi_started) {
-            s_last_error = ensure_wifi_started();
-            if (s_last_error != ESP_OK) {
-                s_logic.state = WIFI_PROVISIONING_FAILED;
-                continue;
+        ESP_LOGI(TAG, "Local Wi-Fi %s: %s; results=%u", job == JOB_SCAN ? "scan" : "connect", esp_err_to_name(err), (unsigned)count);
+        if (publish_lock()) {
+            if (job == JOB_SCAN) {
+                memcpy(s_aps, found, sizeof(found)); s_count = count; s_selected = 0; s_page = PAGE_SCAN;
+                copy_limited(s_detail, sizeof(s_detail), err != ESP_OK ? "扫描失败，长按 OK 重试" : count ? "仅支持 2.4 GHz 网络" : "未找到网络，长按 OK 重试");
+            } else {
+                s_page = err == ESP_OK ? PAGE_READY : PAGE_FAILED;
+                if (err == ESP_OK) s_config = config;
+                copy_limited(s_detail, sizeof(s_detail), err == ESP_OK ? "新网络已保存，登录状态保留" : err == ESP_ERR_TIMEOUT ? "连接超时，请检查密码与信号" : err == ESP_ERR_NOT_SUPPORTED ? "中转版缺少注册配置，请使用直连版" : "连接或保存失败，请重试");
             }
-        }
-        if (s_has_pending_form) {
-            provisioning_form_t form = s_pending_form;
-            s_has_pending_form = false;
-            s_logic.has_saved_config = true;
-            s_logic.state = WIFI_PROVISIONING_CONNECTING;
-            s_last_error = register_device(&form);
-            wifi_provisioning_logic_on_connect_result(&s_logic, s_last_error == ESP_OK);
-        } else if (s_logic.state == WIFI_PROVISIONING_CONNECTING && s_config.ssid[0] != '\0') {
-            s_last_error = connect_station(s_config.ssid, s_config.password);
-            wifi_provisioning_logic_on_connect_result(&s_logic, s_last_error == ESP_OK);
+            s_dirty = true;
+            bsp_lvgl_unlock();
         }
     }
     stop_wifi();
-    s_worker_task = NULL;
-    s_exit_requested = false;
+    /* No UI access or network ownership after this publication. */
+    s_worker_done = true;
     vTaskDelete(NULL);
 }
-
-static device_music_screen_t provisioning_screen_for_state(void)
+static void request_job(local_job_t job)
 {
-    switch (wifi_provisioning_logic_state(&s_logic)) {
-    case WIFI_PROVISIONING_NEEDS_SETUP:
-        return DEVICE_MUSIC_SCREEN_SETUP;
-    case WIFI_PROVISIONING_CONNECTING:
-        return DEVICE_MUSIC_SCREEN_REGISTERING;
-    case WIFI_PROVISIONING_CONNECTED:
-        return DEVICE_MUSIC_SCREEN_READY;
-    case WIFI_PROVISIONING_FAILED:
-    default:
-        return DEVICE_MUSIC_SCREEN_SETUP_FAILED;
-    }
-}
-
-static const char *provisioning_detail(void)
-{
-    if (wifi_provisioning_logic_state(&s_logic) == WIFI_PROVISIONING_CONNECTING && s_flow_detail[0]) {
-        return s_flow_detail;
-    }
-    if (wifi_provisioning_logic_state(&s_logic) == WIFI_PROVISIONING_CONNECTED && s_flow_detail[0]) {
-        return s_flow_detail;
-    }
-    return "";
-}
-
-static bool provisioning_needs_rerender(device_music_screen_t screen_id)
-{
-    return s_scr == NULL ||
-           s_rendered_screen != screen_id ||
-           strcmp(s_rendered_detail, provisioning_detail()) != 0 ||
-           strcmp(s_rendered_ap_ssid, s_ap_ssid) != 0;
-}
-
-static void render_provisioning_ui(void)
-{
-    device_music_screen_t screen_id = provisioning_screen_for_state();
-    if (!provisioning_needs_rerender(screen_id)) {
+    if (s_exit_requested) return;
+    if (!s_worker_task && xTaskCreate(worker, "wifi_local", 6144, NULL, 4, &s_worker_task) != pdPASS) {
+        s_worker_task = NULL; s_page = PAGE_SCAN; s_dirty = true;
+        copy_limited(s_detail, sizeof(s_detail), "内存不足，长按 OK 重试");
         return;
     }
-
-    lv_obj_t *old = s_scr;
-    lv_obj_t *screen = device_music_ui_create_screen(screen_id);
-    switch (screen_id) {
-    case DEVICE_MUSIC_SCREEN_SETUP:
-        device_music_ui_draw_setup(screen, s_ap_ssid);
-        break;
-    case DEVICE_MUSIC_SCREEN_REGISTERING:
-        device_music_ui_draw_progress(screen, screen_id, NULL, NULL, s_flow_detail[0] ? 3 : 2);
-        break;
-    case DEVICE_MUSIC_SCREEN_READY:
-        device_music_ui_draw_success(screen, NULL, NULL);
-        break;
-    case DEVICE_MUSIC_SCREEN_SETUP_FAILED:
-        device_music_ui_draw_error(screen, screen_id, NULL, NULL);
-        break;
-    default:
-        device_music_ui_draw_message(screen, screen_id, NULL, NULL);
-        break;
-    }
-
-    s_scr = screen;
-    lv_screen_load(s_scr);
-    if (old != NULL) {
-        lv_obj_delete(old);
-    }
-    s_rendered_screen = screen_id;
-    copy_limited(s_rendered_detail, sizeof(s_rendered_detail), provisioning_detail());
-    copy_limited(s_rendered_ap_ssid, sizeof(s_rendered_ap_ssid), s_ap_ssid);
+    portENTER_CRITICAL(&s_job_lock);
+    s_job = job;
+    if (job == JOB_CONNECT) s_job_config = s_attempt;
+    portEXIT_CRITICAL(&s_job_lock);
+    s_page = job == JOB_SCAN ? PAGE_SCANNING : PAGE_CONNECTING;
+    s_dirty = true;
+    xTaskNotifyGive(s_worker_task);
 }
-
+static const char *const s_actions[] = {"连接此网络", "删除末尾字符", "显示 / 隐藏密码", "继续输入", "返回网络列表"};
+static void render(void)
+{
+    if (!s_dirty) return;
+    s_dirty = false;
+    device_music_ui_set_network(s_sta_got_ip, 0);
+    if (!s_scr) s_scr = device_music_ui_create_screen(DEVICE_MUSIC_SCREEN_SETUP);
+    else device_music_ui_reset_screen(s_scr, DEVICE_MUSIC_SCREEN_SETUP);
+    if (s_page == PAGE_SCAN) {
+        const char *names[LOCAL_WIFI_MAX]; bool secure[LOCAL_WIFI_MAX];
+        for (size_t i = 0; i < s_count; ++i) { names[i] = s_aps[i].ssid; secure[i] = s_aps[i].auth != WIFI_AUTH_OPEN; }
+        device_music_ui_draw_wifi_scan(s_scr, names, secure, s_count, s_selected, s_detail);
+    } else if (s_page == PAGE_PASSWORD) {
+        device_music_ui_draw_wifi_password(s_scr, s_attempt.ssid, s_editor.text,
+            wifi_password_editor_characters(&s_editor), s_editor.character,
+            s_editor.visible, wifi_password_editor_group(&s_editor), s_detail);
+    } else if (s_page == PAGE_ACTIONS) {
+        device_music_ui_draw_menu(s_scr, "密码操作。", NULL, s_actions, 5, s_action);
+    } else if (s_page == PAGE_READY) {
+        device_music_ui_draw_success(s_scr, "网络已连接。", s_detail);
+        device_music_ui_set_footer(s_scr, "—", s_finish_requested ? "等待" : "进入音乐", "—");
+    } else if (s_page == PAGE_FAILED) {
+        device_music_ui_draw_message(s_scr, DEVICE_MUSIC_SCREEN_SETUP_FAILED, "网络连接失败。", s_detail);
+        device_music_ui_set_footer(s_scr, "—", "重试", "换网络");
+    } else {
+        device_music_ui_draw_progress(s_scr, DEVICE_MUSIC_SCREEN_REGISTERING,
+            s_page == PAGE_SCANNING ? "正在扫描网络。" : "正在连接网络。",
+            s_page == PAGE_SCANNING ? "正在搜索附近的 2.4 GHz Wi-Fi" : "请稍候，连接成功后保存网络", 1);
+    }
+    lv_screen_load(s_scr);
+    lv_mem_monitor_t memory;
+    lv_mem_monitor(&memory);
+    ESP_LOGI(TAG, "Local Wi-Fi UI page=%u; lv_free=%u; lv_largest=%u",
+             (unsigned)s_page, (unsigned)memory.free_size, (unsigned)memory.free_biggest_size);
+}
 static void tick(lv_timer_t *timer)
 {
     (void)timer;
-    render_provisioning_ui();
-}
-
-void wifi_provisioning_page_enter(void)
-{
-    bool has_config = load_config(&s_config);
-    wifi_provisioning_logic_init(&s_logic, has_config);
-    s_rendered_screen = DEVICE_MUSIC_SCREEN_COUNT;
-    s_rendered_detail[0] = '\0';
-    s_rendered_ap_ssid[0] = '\0';
-    s_exit_requested = false;
-    render_provisioning_ui();
-    s_timer = lv_timer_create(tick, 250, NULL);
-    if (s_worker_task == NULL) {
-        xTaskCreate(worker_task, "cloud_setup", 6144, NULL, 4, &s_worker_task);
-    }
-    if (s_worker_task != NULL) {
-        xTaskNotifyGive(s_worker_task);
-    }
-}
-
-bool wifi_provisioning_page_has_saved_config(void)
-{
-    if (demo_radio_nvs_prepare() != ESP_OK) {
-        return false;
-    }
-    provisioning_config_t config = {0};
-    return load_config(&config);
-}
-
-void wifi_provisioning_page_set_complete_callback(void (*callback)(void))
-{
-    s_complete_callback = callback;
-}
-
-void wifi_provisioning_page_exit(void)
-{
-    if (s_timer) {
-        lv_timer_delete(s_timer);
-        s_timer = NULL;
-    }
-    if (s_worker_task) {
-        s_exit_requested = true;
-        xTaskNotifyGive(s_worker_task);
-        for (int i = 0; i < 100 && s_worker_task != NULL; i++) {
-            vTaskDelay(pdMS_TO_TICKS(20));
-        }
-    }
-    if (s_worker_task == NULL) {
-        stop_wifi();
-    }
-    if (s_scr) {
-        lv_obj_delete(s_scr);
-        s_scr = NULL;
-    }
-}
-
-void wifi_provisioning_page_key(bsp_btn_t btn, bsp_btn_ev_t ev)
-{
-    if (btn != BSP_BTN_OK) {
+    if (s_finish_requested && s_worker_done) {
+        s_worker_task = NULL;
+        void (*callback)(void) = s_complete_callback;
+        s_finish_requested = false;
+        if (callback) callback();
         return;
     }
-    if (ev == BSP_BTN_LONG) {
-        clear_config();
-        wifi_provisioning_logic_on_ok_long(&s_logic);
-    } else if (ev == BSP_BTN_CLICK) {
-        if (s_logic.state == WIFI_PROVISIONING_CONNECTED &&
-            s_complete_callback != NULL &&
-            wifi_provisioning_page_has_saved_config()) {
-            s_complete_callback();
-            return;
-        }
-        wifi_provisioning_logic_on_ok_click(&s_logic);
-        if (s_logic.state == WIFI_PROVISIONING_CONNECTING && s_worker_task != NULL) {
+    render();
+}
+void wifi_provisioning_page_enter(void)
+{
+    (void)load_config(&s_config);
+    s_setup_requested = 0;
+    s_page = PAGE_SCANNING; s_dirty = true; s_detail[0] = 0;
+    s_count = s_selected = 0; s_finish_requested = s_exit_requested = s_worker_done = false;
+    s_job = JOB_NONE;
+    wifi_password_editor_init(&s_editor);
+    render();
+    s_timer = lv_timer_create(tick, 100, NULL);
+    request_job(JOB_SCAN);
+}
+bool wifi_provisioning_page_has_saved_config(void)
+{
+    if (demo_radio_nvs_prepare() != ESP_OK) return false;
+    provisioning_config_t config;
+    return load_config(&config);
+}
+void wifi_provisioning_page_set_complete_callback(void (*callback)(void)) { s_complete_callback = callback; }
+void wifi_provisioning_page_exit(void)
+{
+    /* Normal handoff occurs only after the worker has released Wi-Fi. */
+    s_exit_requested = true;
+    if (s_worker_task && !s_worker_done) xTaskNotifyGive(s_worker_task);
+    if (s_timer) { lv_timer_delete(s_timer); s_timer = NULL; }
+    if (s_scr) { lv_obj_delete(s_scr); s_scr = NULL; }
+    memset(&s_editor, 0, sizeof(s_editor));
+    memset(&s_attempt, 0, sizeof(s_attempt));
+}
+static void submit_password(void)
+{
+    if (!wifi_provisioning_password_is_valid(s_editor.text) || !s_editor.text[0]) {
+        copy_limited(s_detail, sizeof(s_detail), "密码需 8–63 字符或 64 位十六进制");
+        s_page = PAGE_PASSWORD; s_dirty = true; return;
+    }
+    copy_limited(s_attempt.password, sizeof(s_attempt.password), s_editor.text);
+    request_job(JOB_CONNECT);
+}
+void wifi_provisioning_page_key(bsp_btn_t btn, bsp_btn_ev_t ev)
+{
+    if ((ev != BSP_BTN_CLICK && ev != BSP_BTN_LONG) || s_finish_requested) return;
+    bool hold = ev == BSP_BTN_LONG;
+    if (s_page == PAGE_CONNECTING || s_page == PAGE_SCANNING) return;
+    if (s_page == PAGE_READY) {
+        if (btn == BSP_BTN_OK && !hold && s_worker_task) {
+            s_finish_requested = s_exit_requested = true; s_dirty = true;
             xTaskNotifyGive(s_worker_task);
         }
+        return;
     }
+    if (s_page == PAGE_FAILED) {
+        if (btn == BSP_BTN_DOWN || (btn == BSP_BTN_OK && hold)) request_job(JOB_SCAN);
+        else if (btn == BSP_BTN_OK) request_job(JOB_CONNECT);
+        return;
+    }
+    if (s_page == PAGE_SCAN) {
+        if (btn == BSP_BTN_OK && hold) request_job(JOB_SCAN);
+        else if (btn == BSP_BTN_OK && s_count) {
+            wifi_auth_mode_t auth = s_aps[s_selected].auth;
+            if (auth != WIFI_AUTH_OPEN && auth != WIFI_AUTH_WPA_PSK && auth != WIFI_AUTH_WPA2_PSK &&
+                auth != WIFI_AUTH_WPA_WPA2_PSK && auth != WIFI_AUTH_WPA3_PSK && auth != WIFI_AUTH_WPA2_WPA3_PSK) {
+                copy_limited(s_detail, sizeof(s_detail), "该网络认证方式暂不支持，请选择其他网络");
+            } else {
+                s_attempt = s_config;
+                copy_limited(s_attempt.ssid, sizeof(s_attempt.ssid), s_aps[s_selected].ssid);
+                s_attempt.password[0] = 0;
+                wifi_password_editor_init(&s_editor); s_detail[0] = 0;
+                if (auth == WIFI_AUTH_OPEN) request_job(JOB_CONNECT);
+                else s_page = PAGE_PASSWORD;
+            }
+        } else if (s_count) {
+            if (btn == BSP_BTN_UP) s_selected = (s_selected + s_count - 1) % s_count;
+            if (btn == BSP_BTN_DOWN) s_selected = (s_selected + 1) % s_count;
+        }
+    } else if (s_page == PAGE_PASSWORD) {
+        s_detail[0] = 0;
+        if (btn == BSP_BTN_OK && hold) { s_page = PAGE_ACTIONS; s_action = 0; }
+        else if (btn == BSP_BTN_OK) {
+            if (!wifi_password_editor_add(&s_editor)) copy_limited(s_detail, sizeof(s_detail), "密码已满，请删除或连接");
+        } else wifi_password_editor_move(&s_editor, btn == BSP_BTN_UP ? -1 : 1, hold);
+    } else if (s_page == PAGE_ACTIONS) {
+        if (btn == BSP_BTN_OK && hold) s_page = PAGE_PASSWORD;
+        else if (btn == BSP_BTN_UP) s_action = (s_action + 4) % 5;
+        else if (btn == BSP_BTN_DOWN) s_action = (s_action + 1) % 5;
+        else if (btn == BSP_BTN_OK) switch (s_action) {
+        case 0: submit_password(); break;
+        case 1: wifi_password_editor_delete(&s_editor); s_page = PAGE_PASSWORD; break;
+        case 2: s_editor.visible = !s_editor.visible; s_page = PAGE_PASSWORD; break;
+        case 3: s_page = PAGE_PASSWORD; break;
+        case 4: memset(&s_editor, 0, sizeof(s_editor)); s_page = PAGE_SCAN; break;
+        }
+    }
+    s_dirty = true;
 }

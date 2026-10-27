@@ -1,4 +1,7 @@
 #include "wifi_provisioning_portal.h"
+#ifdef ESP_PLATFORM
+#include "sdkconfig.h"
+#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -152,26 +155,25 @@ const char *wifi_provisioning_portal_html(void)
         "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
         "<title>网易云音乐设备配网</title><style>"
-        "*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#202124;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif}"
-        ".top{background:linear-gradient(145deg,#e9434f,#c81d31);color:#fff;padding:28px 20px 42px}.brand{font-size:13px;opacity:.86}.top h1{font-size:25px;margin:8px 0}.top p{font-size:14px;line-height:1.6;margin:0;opacity:.9}"
-        ".wrap{max-width:520px;margin:-24px auto 32px;padding:0 14px}.card{background:#fff;border-radius:20px;padding:22px 18px;box-shadow:0 8px 28px rgba(30,35,40,.1)}"
-        ".steps{display:flex;align-items:center;margin-bottom:24px}.step{display:flex;align-items:center;color:#9aa0a6;font-size:12px;white-space:nowrap}.step.on{color:#c81d31;font-weight:700}.dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f0f1f3;margin-right:6px}.on .dot{background:#c81d31;color:#fff}.line{height:1px;background:#e5e7eb;flex:1;margin:0 7px}"
-        "h2{font-size:18px;margin:0 0 5px}.hint{color:#70757a;font-size:13px;line-height:1.55;margin:0 0 14px}.label{font-size:13px;font-weight:700;margin:18px 0 8px;display:block}"
-        "#networks{display:grid;gap:8px}.network{width:100%;border:1px solid #e3e5e8;background:#fff;border-radius:12px;padding:12px;text-align:left;display:flex;align-items:center;justify-content:space-between;font-size:15px}.network:active,.network.selected{border-color:#d52b3f;background:#fff5f6}.meta{font-size:12px;color:#80868b;margin-left:10px}"
-        ".scanstate{padding:18px 10px;text-align:center;color:#70757a;font-size:13px;background:#f8f9fa;border-radius:12px}.tools{display:flex;justify-content:space-between;margin-top:10px}.link{border:0;background:none;color:#bd2235;padding:6px 0;font-size:13px}"
-        "input{width:100%;height:48px;border:1px solid #d9dce1;border-radius:12px;padding:0 13px;font-size:15px;outline:none;background:#fff}input:focus{border-color:#cf3043;box-shadow:0 0 0 3px rgba(207,48,67,.1)}"
-        ".pw{position:relative}.pw input{padding-right:58px}.eye{position:absolute;right:7px;top:7px;height:34px;border:0;background:#f3f4f6;border-radius:8px;color:#555}"
-        ".advanced{margin-top:22px;padding-top:18px;border-top:1px solid #eee}.advanced summary{font-size:14px;font-weight:700;cursor:pointer}.advanced .hint{margin:8px 0}"
-        ".submit{width:100%;height:50px;border:0;border-radius:13px;background:#c81d31;color:#fff;font-size:16px;font-weight:700;margin-top:24px;box-shadow:0 6px 16px rgba(200,29,49,.25)}.submit:active{transform:translateY(1px)}"
-        ".foot{text-align:center;color:#8b9097;font-size:12px;line-height:1.6;margin:16px 8px}</style></head><body>"
-        "<header class='top'><div class='brand'>FoloToy · 网易云音乐</div><h1>连接设备</h1><p>选择家里的 2.4 GHz Wi-Fi，完成后设备会自动连接中转服务。</p></header>"
+        "*{box-sizing:border-box}body{--bg:#f0e9da;--fg:#3c3026;--sub:#77624c;--edge:#c3ad91;--panel:#e7dcc9;--ac:#75452e;margin:0;background:var(--bg);color:var(--fg);font:14px/1.7 Arial,'Noto Sans CJK SC',sans-serif}"
+        "@media(prefers-color-scheme:dark){body{--bg:#29251f;--fg:#e7ddc9;--sub:#baac96;--edge:#635242;--panel:#373027;--ac:#d4a47b}}"
+        "button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:3px}.top,.wrap{max-width:520px;margin:0 auto;padding:24px}.top{padding-bottom:8px}.brand{font:10px monospace;letter-spacing:2px;color:var(--sub);border-bottom:1px solid var(--edge);padding-bottom:16px}.top h1{font:30px/1.4 Georgia,'Noto Serif CJK SC',serif;font-weight:400;margin:22px 0 12px;padding-bottom:12px;border-bottom:2px solid var(--fg)}.top p,.hint,.foot{font-size:12px;color:var(--sub)}.card{padding:0}.steps{display:flex;align-items:center;margin-bottom:24px}.step{display:flex;align-items:center;color:var(--sub);font-size:11px;white-space:nowrap}.step.on{color:var(--ac)}.dot{font:20px Georgia;margin-right:8px}.line{height:1px;background:var(--edge);flex:1;margin:0 10px}h2{font-size:16px;font-weight:400;margin:0 0 5px}.hint{margin:0 0 14px}.label{font-size:12px;margin:18px 0 8px;display:block}"
+        "#networks{display:grid}.network{width:100%;border:0;border-top:1px solid var(--edge);background:transparent;color:var(--fg);border-radius:0;padding:12px 8px;text-align:left;display:flex;align-items:center;justify-content:space-between;font-size:14px}.network.selected{border-top:2px solid var(--ac);background:var(--panel);color:var(--ac)}.meta{font-size:11px;color:var(--sub);margin-left:10px}.scanstate{padding:18px 10px;text-align:center;color:var(--sub);background:var(--panel);font-size:12px}.tools{display:flex;justify-content:space-between;margin-top:10px}.link{border:0;background:none;color:var(--ac);padding:6px 0;font-size:12px}"
+        "input{width:100%;height:46px;border:1px solid var(--edge);border-radius:2px;padding:0 10px;font-size:14px;background:transparent;color:var(--fg)}.pw{position:relative}.pw input{padding-right:58px}.eye{position:absolute;right:7px;top:7px;height:32px;border:0;background:var(--panel);color:var(--fg)}.advanced{margin-top:22px;padding-top:18px;border-top:1px solid var(--edge)}.advanced summary{font-size:14px;cursor:pointer}.submit{width:100%;height:48px;border:0;border-radius:0;background:var(--ac);color:var(--bg);font-size:14px;margin-top:24px}.foot{border-top:1px solid var(--edge);padding-top:14px;margin-top:24px}</style></head><body>"
+#ifdef CONFIG_NETEASE_DIRECT
+        "<header class='top'><div class='brand'>FOLO / SETUP · 余白</div><h1>给音乐，连上线。</h1><p>选择家里的 2.4 GHz Wi-Fi，完成后在设备屏幕扫码登录网易云。</p></header>"
+#else
+        "<header class='top'><div class='brand'>FOLO / SETUP · 余白</div><h1>给音乐，连上线。</h1><p>选择家里的 2.4 GHz Wi-Fi，完成后设备会自动连接中转服务。</p></header>"
+#endif
         "<main class='wrap'><section class='card'><div class='steps'><div class='step on'><span class='dot'>1</span>选 Wi-Fi</div><i class='line'></i><div class='step'><span class='dot'>2</span>填信息</div><i class='line'></i><div class='step'><span class='dot'>3</span>完成</div></div>"
         "<h2>选择附近的 Wi-Fi</h2><p class='hint'>仅支持 2.4 GHz 网络。列表会按信号强弱排序。</p><div id='networks'><div class='scanstate'>正在搜索附近的网络…</div></div>"
         "<div class='tools'><button class='link' id='manual' type='button'>手动输入网络名称</button><button class='link' id='rescan' type='button'>重新扫描</button></div>"
         "<form method='post' action='/save' id='setup'><label class='label' for='ssid'>Wi-Fi 名称</label><input id='ssid' name='ssid' maxlength='32' autocomplete='off' required placeholder='请先选择上面的网络'>"
         "<label class='label' for='password'>Wi-Fi 密码</label><div class='pw'><input id='password' name='password' maxlength='64' type='password' autocomplete='new-password' placeholder='请输入 Wi-Fi 密码'><button class='eye' id='eye' type='button'>显示</button></div>"
+#ifndef CONFIG_NETEASE_DIRECT
         "<details class='advanced' open><summary>中转服务信息</summary><p class='hint'>从电脑上的一键启动窗口复制下面两项。</p><label class='label' for='cloud_url'>Relay URL</label><input id='cloud_url' name='cloud_url' maxlength='127' type='url' required placeholder='如 http://192.168.1.10:18080'>"
         "<label class='label' for='registration_code'>Registration Code</label><input id='registration_code' name='registration_code' maxlength='95' required placeholder='如 pair-xxxxxxxx'></details>"
+#endif
         "<button class='submit' type='submit'>连接设备</button></form></section><p class='foot'>提交后请保持设备通电，并回到设备屏幕查看连接结果。</p></main>"
         "<script>const list=document.getElementById('networks'),ssid=document.getElementById('ssid');"
         "function strength(r){return r>=-55?'信号强':r>=-70?'信号中':'信号弱'}"
@@ -185,6 +187,10 @@ const char *wifi_provisioning_success_html(void)
     return
         "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>正在连接</title><style>body{margin:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;color:#202124}.card{max-width:420px;margin:12vh auto;padding:42px 24px;text-align:center;background:#fff;border-radius:20px;box-shadow:0 8px 28px rgba(30,35,40,.1)}.icon{width:58px;height:58px;margin:auto;border-radius:50%;display:grid;place-items:center;background:#fff0f2;color:#c81d31;font-size:28px}h1{font-size:23px;margin:20px 0 10px}p{color:#70757a;font-size:14px;line-height:1.7}</style></head>"
+        "<title>正在连接</title><style>body{margin:0;background:#f0e9da;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;color:#3c3026}.card{max-width:420px;margin:12vh auto;padding:32px 24px;text-align:left;border-top:2px solid #3c3026}.icon{font:40px Georgia;color:#8e482f}h1{font:27px Georgia,serif;font-weight:400;margin:20px 0 10px}p{color:#77624c;font-size:14px;line-height:1.7}@media(prefers-color-scheme:dark){body{background:#29251f;color:#e7ddc9}.card{border-color:#e7ddc9}.icon{color:#d4a47b}p{color:#baac96}}</style></head>"
+#ifdef CONFIG_NETEASE_DIRECT
+        "<body><section class='card'><div class='icon'>✓</div><h1>正在连接</h1><p>设备正在连接 Wi-Fi。<br>请回到设备屏幕扫码登录网易云。</p></section></body></html>";
+#else
         "<body><section class='card'><div class='icon'>✓</div><h1>正在连接</h1><p>信息已保存，设备正在连接 Wi-Fi 和中转服务。<br>请回到设备屏幕查看结果。</p></section></body></html>";
+#endif
 }

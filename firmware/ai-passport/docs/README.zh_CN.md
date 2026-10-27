@@ -1,5 +1,7 @@
 # FoloToy AI Passport
 
+> 本分支当前产品为 Folo Music 2.0。请先看[产品文档索引](../../../docs/README.md)和[正式版说明](../../../docs/releases/v2.0.md)；下文保留上游硬件与开发参考。
+
 [English](README.md) | 简体中文
 
 FoloToy AI Passport 是一个开放式可穿戴 AI 硬件，本仓库是这款 AI 硬件的开发基线。它不只展示"板子能运行什么"，还把开发应用所需的**硬件事实、稳定接口、资源边界、参考实现和验收方法**放在同一仓库中。

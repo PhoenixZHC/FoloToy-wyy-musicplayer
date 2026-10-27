@@ -34,6 +34,8 @@ void audio_stream_stop(void);
 audio_stream_state_t audio_stream_state(void);
 bool audio_stream_is_active(void);
 bool audio_stream_accepts_http_headers(int status_code, int64_t content_length);
+/* Refill in batches; force a read when an incomplete MP3 frame needs data. */
+bool audio_stream_needs_refill(int buffered_bytes, bool decoder_needs_data);
 uint32_t audio_stream_elapsed_ms(void);
 int audio_stream_volume(void);
 esp_err_t audio_stream_set_volume(int percent);

@@ -1,6 +1,7 @@
 #include "wifi_provisioning_logic.h"
 
 #include <string.h>
+#include <ctype.h>
 
 void wifi_provisioning_logic_init(wifi_provisioning_logic_t *logic, bool has_saved_config)
 {
@@ -74,6 +75,25 @@ wifi_provisioning_station_action_t wifi_provisioning_station_action(bool station
     return WIFI_PROVISIONING_STA_RECONNECT;
 }
 
+bool wifi_provisioning_password_is_valid(const char *password)
+{
+    if (password == NULL) return false;
+    size_t length = strlen(password);
+    if (length == 0) return true;
+    if (length == 64) {
+        for (size_t i = 0; i < length; ++i) {
+            if (!isxdigit((unsigned char)password[i])) return false;
+        }
+        return true;
+    }
+    if (length < 8 || length > 63) return false;
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char c = (unsigned char)password[i];
+        if (c < 0x20 || c > 0x7e) return false;
+    }
+    return true;
+}
+
 static bool is_softap_peer_url(const char *url)
 {
     return strncmp(url, "http://192.168.4.", 17) == 0;
@@ -105,4 +125,54 @@ bool wifi_provisioning_has_ready_config(const char *cloud_url,
 bool wifi_provisioning_should_run_mock_smoke(const char *ssid)
 {
     return ssid == NULL || ssid[0] == '\0';
+}
+
+static const char *const password_groups[] = {
+    "qwertyuiopasdfghjklzxcvbnm", "QWERTYUIOPASDFGHJKLZXCVBNM", "1234567890",
+    "!@#$%^&*()-_=+[]{};:\",.<>?/\\|`~' "
+};
+void wifi_password_editor_init(wifi_password_editor_t *editor)
+{
+    if (editor) memset(editor, 0, sizeof(*editor));
+}
+void wifi_password_editor_move(wifi_password_editor_t *editor, int direction, bool group)
+{
+    if (!editor) return;
+    if (group) {
+        editor->group = (editor->group + (direction < 0 ? 3 : 1)) % 4;
+        editor->character = 0;
+    } else {
+        unsigned length = strlen(password_groups[editor->group % 4]);
+        editor->character = (editor->character + (direction < 0 ? length - 1 : 1)) % length;
+    }
+}
+char wifi_password_editor_candidate(const wifi_password_editor_t *editor)
+{
+    if (!editor) return 0;
+    const char *group = password_groups[editor->group % 4];
+    return group[editor->character % strlen(group)];
+}
+const char *wifi_password_editor_group(const wifi_password_editor_t *editor)
+{
+    static const char *const names[] = {"小写字母", "大写字母", "数字", "符号与空格"};
+    return names[editor ? editor->group % 4 : 0];
+}
+const char *wifi_password_editor_characters(const wifi_password_editor_t *editor)
+{
+    return editor ? password_groups[editor->group % 4] : password_groups[0];
+}
+bool wifi_password_editor_add(wifi_password_editor_t *editor)
+{
+    if (!editor) return false;
+    size_t length = strlen(editor->text);
+    if (length == WIFI_PASSWORD_CAPACITY) return false;
+    editor->text[length] = wifi_password_editor_candidate(editor);
+    editor->text[length + 1] = '\0';
+    return true;
+}
+void wifi_password_editor_delete(wifi_password_editor_t *editor)
+{
+    if (!editor) return;
+    size_t length = strlen(editor->text);
+    if (length) editor->text[length - 1] = '\0';
 }

@@ -24,7 +24,7 @@ extern "C" {
 #define NETEASE_CLIENT_BASE_URL_LEN 128
 #define NETEASE_CLIENT_DEVICE_ID_LEN 64
 #define NETEASE_CLIENT_DEVICE_SECRET_LEN 128
-#define NETEASE_CLIENT_LOGIN_ID_LEN 64
+#define NETEASE_CLIENT_LOGIN_ID_LEN 128
 #define NETEASE_CLIENT_QR_PAYLOAD_LEN 256
 #define NETEASE_CLIENT_NAME_LEN 64
 #define NETEASE_CLIENT_OWNER_LEN 64
@@ -32,7 +32,7 @@ extern "C" {
 #define NETEASE_CLIENT_FORMAT_LEN 16
 #define NETEASE_CLIENT_TRACK_URL_LEN 512
 #define NETEASE_CLIENT_MAX_PLAYLISTS 20
-#define NETEASE_CLIENT_MAX_TRACKS 15
+#define NETEASE_CLIENT_MAX_TRACKS 8
 #define NETEASE_CLIENT_RESPONSE_MAX_BYTES 4096
 
 typedef struct {
@@ -79,6 +79,7 @@ typedef struct {
 
 typedef struct {
     size_t count;
+    bool truncated;
     netease_playlist_t items[NETEASE_CLIENT_MAX_PLAYLISTS];
 } netease_playlist_list_t;
 

@@ -15,17 +15,18 @@ run_static_checks() {
     local cjson_dir
 
     python3 tools/check_repo.py
+    python3 tests/test_package_release.py
 
     actionlint_bin="${ACTIONLINT_BIN:-}"
     if [[ -z "${actionlint_bin}" ]]; then
         actionlint_bin="$(command -v actionlint || true)"
     fi
     if [[ -z "${actionlint_bin}" || ! -x "${actionlint_bin}" ]]; then
-        actionlint_bin="$(./tools/install-actionlint.sh)"
+        actionlint_bin="$(bash ./tools/install-actionlint.sh)"
     fi
     "${actionlint_bin}" -color .github/workflows/*.yml
 
-    test_dir="$(mktemp -d /tmp/ai-passport-host-tests.XXXXXX)"
+    test_dir="$(mktemp -d "${TMPDIR:-/tmp}/ai-passport-host-tests.XXXXXX")"
     cc_bin="${CC:-cc}"
     cjson_dir="${IDF_PATH:-}/components/json/cJSON"
     if [[ ! -d "${cjson_dir}" ]]; then
@@ -38,6 +39,9 @@ run_static_checks() {
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_netease_app_logic.c main/netease_app_logic.c \
         -o "${test_dir}/test_netease_app_logic"
+	    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
+	        tests/test_music_lyrics.c main/music_lyrics.c \
+	        -o "${test_dir}/test_music_lyrics"
 	    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
 	        tests/test_wifi_provisioning_logic.c main/wifi_provisioning_logic.c \
 	        -o "${test_dir}/test_wifi_provisioning_logic"
@@ -61,13 +65,23 @@ run_static_checks() {
         -o "${test_dir}/test_netease_client"
     "${test_dir}/test_ui_pixel_math"
 	    "${test_dir}/test_netease_app_logic"
+	    "${test_dir}/test_music_lyrics"
 	    "${test_dir}/test_wifi_provisioning_logic"
 	    "${test_dir}/test_device_music_ui_spec"
 	    "${test_dir}/test_wifi_provisioning_portal"
 	    "${test_dir}/test_audio_stream"
     "${test_dir}/test_netease_client"
-    rm -rf "${test_dir}"
-    echo "Host tests: PASS"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -DCONFIG_NETEASE_DIRECT=1 -Imain \
+        tests/test_wifi_provisioning_portal.c main/wifi_provisioning_portal.c \
+        -o "${test_dir}/test_wifi_provisioning_portal_direct"
+    "${test_dir}/test_wifi_provisioning_portal_direct"
+    DIRECT_TEST_OUT="${test_dir}/test_netease_direct" bash tools/run_direct_host_tests.sh
+    if [[ "${KEEP_VALIDATION_ARTIFACTS:-0}" != 1 ]]; then
+        rm -rf "${test_dir}"
+    else
+        echo "Host artifacts: ${test_dir}"
+    fi
+    echo "Host tests: PASS (12 executables)"
 }
 
 run_firmware_checks() (
@@ -79,7 +93,9 @@ run_firmware_checks() (
     fi
 
     validation_build_dir="$(mktemp -d /tmp/ai-passport-firmware.XXXXXX)"
-    trap 'case "${validation_build_dir}" in /tmp/ai-passport-firmware.*) rm -rf -- "${validation_build_dir}" ;; esac' EXIT
+    if [[ "${KEEP_VALIDATION_ARTIFACTS:-0}" != 1 ]]; then
+        trap 'case "${validation_build_dir}" in /tmp/ai-passport-firmware.*) rm -rf -- "${validation_build_dir}" ;; esac' EXIT
+    fi
 
     SDKCONFIG_DEFAULTS="${repo_root}/sdkconfig.defaults" \
         idf.py -B "${validation_build_dir}" \

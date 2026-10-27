@@ -1,0 +1,8 @@
+menu "NetEase player"
+config NETEASE_DIRECT
+    bool "Connect to NetEase directly (experimental)"
+    default n
+    help
+        Wi-Fi-only setup and local QR session. No relay fallback.
+        Requires internet access and real-board validation before release.
+endmenu

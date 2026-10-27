@@ -61,7 +61,7 @@ int main(void)
              sizeof(oversized_tracks_json) - used,
              "]}");
     assert(netease_parse_tracks(oversized_tracks_json, &tracks) == ESP_OK);
-    assert(tracks.count == 15);
+    assert(tracks.count == NETEASE_CLIENT_MAX_TRACKS);
 
     const char *unavailable_json =
         "{\"error\":\"track_unavailable\",\"message\":\"这首歌当前无法播放\"}";

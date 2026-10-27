@@ -4,6 +4,8 @@
 
 # Automated Build and Release
 
+> Folo Music 2.0 uses ESP-IDF 5.5.4 and explicitly selects sdkconfig.direct.defaults. The 5.5.3/default build below is the upstream baseline, not the product release command. See the [product deployment guide](../../../../docs/deployment.md) for direct builds, exact-8-MiB packaging and settings-preservation rules. Static validation also runs four packaging regressions; three font tests and 98 previews run separately.
+
 `.github/workflows/build-firmware.yml` builds and publishes firmware for tags and supports manual dispatch. Ordinary branch pushes do not trigger it. Keep this page synchronized with the workflow.
 
 The build job restores ccache, runs `./tools/validate.sh --firmware` with ESP-IDF 5.5.3 for ESP32-C3, verifies the bootloader at `0x0`, partition table at `0x8000`, application at `0x10000`, and 8 MB Flash arguments, then uploads `FoloToy-Wangyiyun-full.bin`. A separate least-privilege release job publishes that artifact only for a tag.

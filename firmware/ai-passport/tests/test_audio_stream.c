@@ -5,6 +5,11 @@
 
 int main(void)
 {
+    assert(audio_stream_needs_refill(0, false));
+    assert(audio_stream_needs_refill(2047, false));
+    assert(!audio_stream_needs_refill(2048, false));
+    assert(!audio_stream_needs_refill(7774, false));
+    assert(audio_stream_needs_refill(4096, true));
     assert(audio_stream_accepts_http_headers(200, -1));
     assert(audio_stream_accepts_http_headers(206, -1));
     assert(!audio_stream_accepts_http_headers(404, 128));
