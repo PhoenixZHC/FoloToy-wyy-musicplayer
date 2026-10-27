@@ -11,3 +11,4 @@
 - 限制：歌单最多 20 项；无随机播放切换、离线音频、隐藏 SSID、企业认证、双槽 OTA。C3 RAM 和非官方接口/版权/网络仍限制并发与可播放性。
 - 整理：当前入口见 README.md、docs/README.md、docs/deployment.md、docs/releases/v2.0.md；旧状态和旧中转部署归档到 docs/archive/，原型及历史源码保留。
 - 发布：在当前 main 完成提交，推送 origin/main，并建立 v2.0-folo-music 正式发布和附件；完成状态以实际远端返回为准。
+- 对外文档：README、发布说明和双语更新日志仅描述最终功能、使用方式与限制；内部方案代号、版本调整和沟通过程保留在开发归档。

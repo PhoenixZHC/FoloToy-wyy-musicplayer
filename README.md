@@ -1,18 +1,17 @@
 # Folo Music 2.0
 
-把 FoloToy AI Passport 变成独立的网易云音乐播放器。正式版由设备通过开源 EAPI/WEAPI 协议直接访问网易云和音频 CDN，无需电脑中转，不使用网易云官方开放平台设备方案。
-
-用户于 2026-10-28 反馈当前暂未发现新 bug，并确认发布 2.0。此反馈不等于已完成全部长期压力测试，验收边界见[发布说明](docs/releases/v2.0.md)。
+把 FoloToy AI Passport 变成独立的网易云音乐播放器。设备通过开源 EAPI/WEAPI 协议直接访问网易云和音频 CDN，无需部署中转服务。支持设备选网、扫码登录、歌单浏览、音乐播放、封面与同步歌词。
 
 ## 下载与安装
 
-正式版标签：v2.0-folo-music。附件统一生成到 release/FoloMusic-v2.0/，包含：
+当前正式版：2.0（标签：v2.0-folo-music）。
 
 [正式版本页面](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/tag/v2.0-folo-music) · [完整 8 MB 固件](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/download/v2.0-folo-music/FoloMusic-v2.0-full-8MB.bin)。
 
 - FoloMusic-v2.0-full-8MB.bin：完整出厂镜像，严格 8,388,608 字节，从 0x0 烧录。**会清空原 Wi-Fi、登录态和显示设置**。
 - FoloMusic-v2.0-app.bin：仅适用于已有匹配 7 MiB factory 分区的设备，从 0x10000 升级以保留设置。
 - manifest.json 和 SHA256SUMS.txt：容量、分段及 SHA-256 校验清单。
+- FoloMusic-v2.0-licenses.zip：上游、组件与字体的原始许可证。
 
 镜像由干净构建产物生成，NVS/PHY 空白区填充 0xFF，不含任何设备密码或登录态。旧 3 MiB 分区设备不能直接写 app。具体操作见[部署与构建](docs/deployment.md)。
 
@@ -28,10 +27,10 @@
 
 ## 功能与边界
 
-- 方案 B 日夜界面、Wi-Fi 信号图标、进度、音量、三键底栏提示；关于页版本 2.0。
+- 日夜两种配色，支持 Wi-Fi 信号图标、播放进度、音量调节和三键操作提示。
 - 当前歌曲封面和同步歌词；封面失败不占位，过长歌名/歌手滚动显示。
-- 每批八首元数据、每屏四行、三页缓存及内存允许时的相邻预取；编号最多 512 项滑窗。冷请求仍受网络及 RAM 限制。
-- 动态字库含 6,774 汉字（GB2312 全集加 11 个姓名用字）、英文大小写、数字及界面标点，不额外扩充繁体或其他语种。
+- 歌曲列表支持分页缓存和相邻页面预取；首次加载速度受网络和设备可用内存影响。
+- 支持简体中文、英文大小写、数字和常用标点，内置 6,774 个汉字。
 - 当前最多显示 20 个歌单；无随机播放切换、离线音频或双槽 OTA；不支持隐藏 SSID 和企业认证。
 - 歌曲版权/会员权限、网络与非官方接口变化可能影响可播放性。不承诺所有歌曲可播或长期零卡顿。
 - 当前应用 3,883,184 字节，7 MiB 应用分区剩 3,456,848 字节（约 3.30 MiB）；Flash 余量与运行 RAM 不同。
@@ -48,7 +47,7 @@
     server/                     旧中转服务源码，保留兼容
     netease-official-firmware/   官方平台历史实验，不是当前方案
 
-旧 v1.2.2 中转包、启动脚本和官方实验保留供历史使用，2.0 无需运行它们。生成物、私有日志、数据库、NVS 与依赖缓存不混入源码提交。
+历史中转服务与官方平台实验代码保留供参考，当前版本无需运行这些服务。
 
 ## 从源码构建
 
@@ -76,7 +75,7 @@ Folo Music 建立在开源社区的工作之上，感谢以下项目的作者、
 | [esp-libhelix-mp3 / Chris Morgan](https://github.com/chmorgan/esp-libhelix-mp3) 与 Helix 项目贡献者 | 通过托管组件提供设备端 MP3 解码；组件及底层解码器分别遵循其原始许可证。 |
 | [api-enhanced / NeteaseCloudMusicApiEnhanced](https://github.com/neteasecloudmusicapienhanced/api-enhanced) | 网易云开源协议参考。设备端实现独立 C 客户端，不要求用户部署该 Node 服务。 |
 | [leo-radio / leo0183](https://github.com/leo0183/leo-radio) | 联网事件驱动与音频资源管理的参考；未整库移植。 |
-| [PassportSim / BlackHole1](https://github.com/BlackHole1/passportsim) | 电脑端固件仿真及自动化诊断工具；对当前生产 SDK 的支持有限，不宣称完整仿真验收已通过。 |
+| [PassportSim / BlackHole1](https://github.com/BlackHole1/passportsim) | 开发期间使用的电脑端固件仿真与诊断工具；对当前生产 SDK 的支持有限。 |
 | [Noto CJK / Noto contributors](https://github.com/notofonts/noto-cjk) | 简体中文字形来源，包括 Noto Sans/Serif CJK。 |
 | [URW Base35 / Artifex 与贡献者](https://github.com/ArtifexSoftware/urw-base35-fonts) | Nimbus Roman 数字字形来源。 |
 | [Pillow / python-pillow](https://github.com/python-pillow/Pillow) 与 [FreeType](https://freetype.org/) | 构建阶段的字形栅格化、字符覆盖检查与预览生成，不在设备上运行。 |
