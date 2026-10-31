@@ -4,7 +4,7 @@
 
 # 构建与验证（Build & Test）
 
-> Folo Music 2.0 产品发布使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为 2.0 发布命令。正式直连构建、严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 4 个打包回归；3 个字体测试与 98 次预览仍单独运行。
+> Folo Music 2.1 产品发布使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为 2.1 构建命令。正式直连构建、严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 4 个打包回归；3 个字体测试与 106 次预览仍单独运行。
 
 使用 ESP-IDF 5.5.3。全新机器或缺少工具链时，先按
 [环境引导](environment-setup.zh_CN.md)完成安装。
@@ -53,8 +53,8 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 电脑版固件仿真运行 `node tools/run_passportsim.cjs <wasm> <merged.bin> <app.elf> /tmp/report.json baseline`。脚本记录镜像与模拟器哈希，遇到 tripwire 或尚未支持的生产场景时明确失败。当前 PassportSim 1.0.3 支持 IDF 5.5.3 Wi-Fi，但不支持 `esp_wifi_set_ps`；仅在独立临时诊断构建省略该调用后，可执行 `diagnostic-wifi` 正常连接及 `diagnostic-wifi-absent` 超时重新扫描。两者都不是发布验收。`diagnostic-wifi-wrong-password` 因模拟器未建模错误密码而返回 `E_HLE`。不得根据受限诊断结果烧录。
 
 直连主机测试需要 mbedTLS 开发头文件与 `libmbedcrypto`。非系统路径通过
-`CC`、`DIRECT_TEST_CFLAGS`、`DIRECT_TEST_LDFLAGS` 指定。静态门禁运行 12 个
-测试程序，包括两种配网模式和独立 HTTP/NVS 替身。设置
+`CC`、`DIRECT_TEST_CFLAGS`、`DIRECT_TEST_LDFLAGS` 指定。静态门禁运行 13 个
+测试程序，包括显示计时与日夜边界、两种配网模式和独立 HTTP/NVS 替身。设置
 `KEEP_VALIDATION_ARTIFACTS=1` 保留临时测试与构建目录。此 fork 的直连构建按
 仓库根 README 使用 ESP-IDF 5.5.4；本上游指南的 5.5.3 基线不改变该选择。
 

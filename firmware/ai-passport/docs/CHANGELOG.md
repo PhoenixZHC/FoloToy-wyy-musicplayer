@@ -4,7 +4,12 @@
 
 # Changelog
 
-## Unreleased
+## 2.1 — 2026-11-01
+
+- Add an automatic screen-off timeout under Settings > Display and day/night: never, 15 or 30 seconds, or 1, 2 or 5 minutes (default: 1 minute), saved across restarts. Music continues with the display off; the first key action only wakes the screen.
+- Switch themes automatically using system time in UTC+8: day from 07:00 to 19:00, night otherwise. Show pending clock synchronization and retain the last saved theme until the clock is valid.
+- Add a centered clock to all page status bars (Beijing time, HH:mm; --:-- before synchronization). Update each minute without resetting the idle timer.
+- Use the same 10 px font, line height and baseline for the name, time, WiFi and battery text; align signal-bar bottoms with the text.
 
 ## 2.0 — 2026-10-28
 

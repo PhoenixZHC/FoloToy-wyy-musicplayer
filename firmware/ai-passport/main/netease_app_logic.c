@@ -1,4 +1,5 @@
 #include "netease_app_logic.h"
+#include "display_policy.h"
 
 #include <string.h>
 
@@ -7,6 +8,7 @@ void netease_app_logic_init(netease_app_logic_t *logic)
     if (logic == NULL) return;
     memset(logic, 0, sizeof(*logic));
     logic->state = NETEASE_APP_LOGIN_QR;
+    logic->timeout_option=DISPLAY_DEFAULT_TIMEOUT_OPTION;
 }
 
 netease_app_state_t netease_app_logic_state(const netease_app_logic_t *logic)
@@ -80,6 +82,7 @@ static void view(netease_app_logic_t *l, netease_app_state_t state)
     if(state==NETEASE_APP_PLAYLISTS) { l->selected=l->playlist_cursor; l->item_count=l->playlist_count; }
     else if(state==NETEASE_APP_TRACKS) { l->selected=l->track_cursor; l->item_count=l->track_count; }
     else if(state==NETEASE_APP_PLAYING) { l->selected=l->playing_index; l->item_count=l->playing_count; }
+    else if(state==NETEASE_APP_SCREEN_TIMEOUT) { l->selected=l->timeout_option; l->item_count=DISPLAY_TIMEOUT_OPTION_COUNT+1; }
     else { l->selected=0; l->item_count=0; }
 }
 static void move_selection(netease_app_logic_t *l, int delta, size_t count)
@@ -96,7 +99,9 @@ static size_t menu_count(netease_app_state_t s)
 {
     switch(s) {
     case NETEASE_APP_NAVIGATION:return 5;
-    case NETEASE_APP_SETTINGS:case NETEASE_APP_APPEARANCE:return 4;
+    case NETEASE_APP_SETTINGS:return 4;
+    case NETEASE_APP_APPEARANCE:return 3;
+    case NETEASE_APP_SCREEN_TIMEOUT:return DISPLAY_TIMEOUT_OPTION_COUNT+1;
     case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:case NETEASE_APP_LOGOUT_CONFIRM:case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_ENDED:return 2;
     default:return 0;
     }
@@ -112,7 +117,7 @@ netease_app_action_t netease_app_logic_on_button(netease_app_logic_t *l, netease
         switch(l->state) {
         case NETEASE_APP_NAVIGATION:case NETEASE_APP_SETTINGS:view(l,l->return_state);break;
         case NETEASE_APP_APPEARANCE:case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:case NETEASE_APP_ABOUT:view(l,NETEASE_APP_SETTINGS);break;
-        case NETEASE_APP_BRIGHTNESS:view(l,NETEASE_APP_APPEARANCE);break;
+        case NETEASE_APP_BRIGHTNESS:case NETEASE_APP_SCREEN_TIMEOUT:view(l,NETEASE_APP_APPEARANCE);break;
         case NETEASE_APP_LOGOUT_CONFIRM:view(l,NETEASE_APP_ACCOUNT);break;
         case NETEASE_APP_WIFI_CONFIRM:view(l,NETEASE_APP_NETWORK);break;
         case NETEASE_APP_ERROR:view(l,l->error_return_state==NETEASE_APP_PLAYING?NETEASE_APP_TRACKS:l->error_return_state);break;
@@ -143,10 +148,15 @@ netease_app_action_t netease_app_logic_on_button(netease_app_logic_t *l, netease
         case NETEASE_APP_ENDED:
             if(i==0) { view(l,NETEASE_APP_PLAYING);l->selected=0;return NETEASE_APP_ACTION_LOAD_TRACK_URL; }
             view(l,NETEASE_APP_TRACKS);break;
-        case NETEASE_APP_SETTINGS: { const netease_app_state_t dest[]={NETEASE_APP_APPEARANCE,NETEASE_APP_NETWORK,NETEASE_APP_ACCOUNT,NETEASE_APP_ABOUT};view(l,dest[i]);break; }
+        case NETEASE_APP_SETTINGS: {
+            const netease_app_state_t dest[]={NETEASE_APP_APPEARANCE,NETEASE_APP_NETWORK,NETEASE_APP_ACCOUNT,NETEASE_APP_ABOUT};
+            view(l,dest[i]);break;
+        }
         case NETEASE_APP_APPEARANCE:
-            if(i<2)return i==0?NETEASE_APP_ACTION_SET_DAY:NETEASE_APP_ACTION_SET_NIGHT;
-            view(l,i==2?NETEASE_APP_BRIGHTNESS:NETEASE_APP_SETTINGS);break;
+            view(l,i==0?NETEASE_APP_BRIGHTNESS:i==1?NETEASE_APP_SCREEN_TIMEOUT:NETEASE_APP_SETTINGS);break;
+        case NETEASE_APP_SCREEN_TIMEOUT:
+            if(i<DISPLAY_TIMEOUT_OPTION_COUNT) { l->timeout_option=i;return NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT; }
+            view(l,NETEASE_APP_APPEARANCE);break;
         case NETEASE_APP_NETWORK:view(l,i==0?NETEASE_APP_WIFI_CONFIRM:NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_ACCOUNT:view(l,i==0?NETEASE_APP_LOGOUT_CONFIRM:NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_LOGOUT_CONFIRM:if(i==1)return NETEASE_APP_ACTION_SWITCH_ACCOUNT;view(l,NETEASE_APP_ACCOUNT);break;

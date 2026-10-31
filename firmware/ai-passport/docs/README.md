@@ -1,6 +1,6 @@
 # FoloToy AI Passport
 
-> This fork currently ships Folo Music 2.0. Start with the [product documentation](../../../docs/README.md) and [release notes](../../../docs/releases/v2.0.md); upstream hardware and development references are retained below.
+> This fork currently targets Folo Music 2.1. Start with the [product documentation](../../../docs/README.md) and [release notes](../../../docs/releases/v2.1.md); upstream hardware and development references are retained below.
 
 English | [简体中文](README.zh_CN.md)
 

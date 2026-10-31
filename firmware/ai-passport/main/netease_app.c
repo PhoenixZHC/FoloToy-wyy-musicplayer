@@ -4,6 +4,7 @@
 #include "bsp_display.h"
 #include "bsp_battery.h"
 #include "device_music_ui.h"
+#include "display_settings.h"
 #include "music_lyrics.h"
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include "demo_radio.h"
@@ -109,10 +110,8 @@ static char s_playing_heading[NETEASE_CLIENT_NAME_LEN];
 static char s_nickname[NETEASE_CLIENT_NAME_LEN];
 static unsigned s_playing_number;
 static netease_work_t s_retry_work;
-static int s_brightness = 70;
 static netease_app_state_t s_rendered_state;
 static bool s_rendered_night;
-static bool s_display_loaded;
 static bool s_display_dirty;
 static netease_work_t s_active_work;
 static bool s_detached_work;
@@ -367,15 +366,16 @@ static esp_err_t start_wifi(void)
 static esp_err_t sync_time_if_possible(void)
 {
     time_t now = time(NULL);
-    if (now > 1609459200) return ESP_OK;
-
-    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "pool.ntp.org");
-    esp_sntp_init();
+    if(!esp_sntp_enabled()) {
+        esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+        esp_sntp_setservername(0, "pool.ntp.org");
+        esp_sntp_init();
+    }
+    if (now > DISPLAY_VALID_CLOCK_EPOCH) return ESP_OK;
 
     for (int i = 0; i < 100; i++) {
         now = time(NULL);
-        if (now > 1609459200) return ESP_OK;
+        if (now > DISPLAY_VALID_CLOCK_EPOCH) return ESP_OK;
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     return ESP_ERR_TIMEOUT;
@@ -790,16 +790,6 @@ static void worker_task(void *arg)
 #endif
 
         esp_err_t err = ESP_OK;
-        if(!s_display_loaded) {
-            nvs_handle_t nvs;
-            if(nvs_open("music_display",NVS_READONLY,&nvs)==ESP_OK) {
-                uint8_t night=0,brightness=70;
-                nvs_get_u8(nvs,"night",&night);nvs_get_u8(nvs,"brightness",&brightness);nvs_close(nvs);
-                s_brightness=brightness>=10 && brightness<=100?brightness:70;
-                if(bsp_lvgl_lock(1000)) { device_music_ui_set_night(night!=0);bsp_display_backlight(s_brightness);bsp_lvgl_unlock(); }
-            }
-            s_display_loaded=true;
-        }
         if(work==NETEASE_WORK_PREFETCH_TRACKS) {
             err=prefetch_tracks();
         } else if (work == NETEASE_WORK_START_QR) {
@@ -827,14 +817,7 @@ static void worker_task(void *arg)
             wifi_provisioning_page_request_setup();
             esp_restart();
         } else if (work == NETEASE_WORK_SAVE_DISPLAY) {
-            nvs_handle_t nvs;
-            err=nvs_open("music_display",NVS_READWRITE,&nvs);
-            if(err==ESP_OK) {
-                err=nvs_set_u8(nvs,"night",device_music_ui_is_night());
-                if(err==ESP_OK)err=nvs_set_u8(nvs,"brightness",s_brightness);
-                if(err==ESP_OK)err=nvs_commit(nvs);
-                nvs_close(nvs);
-            }
+            err=display_settings_save();
         }
 
         if (err != ESP_OK) {
@@ -941,7 +924,7 @@ static device_music_screen_t screen_for_state(void)
     case NETEASE_APP_PLAYING:
         return netease_app_logic_is_playing(&s_logic) ? DEVICE_MUSIC_SCREEN_PLAYING : DEVICE_MUSIC_SCREEN_PAUSED;
     case NETEASE_APP_NAVIGATION:case NETEASE_APP_SETTINGS:case NETEASE_APP_APPEARANCE:
-    case NETEASE_APP_BRIGHTNESS:case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:
+    case NETEASE_APP_BRIGHTNESS:case NETEASE_APP_SCREEN_TIMEOUT:case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:
     case NETEASE_APP_LOGOUT_CONFIRM:case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_ABOUT:case NETEASE_APP_ENDED:
         return DEVICE_MUSIC_SCREEN_TRACKS;
     case NETEASE_APP_ERROR:
@@ -1092,7 +1075,15 @@ static void render_netease_ui(void)
     if (s_logic.state >= NETEASE_APP_NAVIGATION && screen_id!=DEVICE_MUSIC_SCREEN_LOADING_TRACK) {
         const char *const nav[]={"返回播放","当前歌曲列表","我的歌单","音量","设置"};
         const char *const settings[]={"显示与日夜","网络","账号","设备信息"};
-        const char *const appearance[]={"日间 · 暖纸","夜间 · 深棕","背光亮度","返回设置"};
+        const char *const appearance[]={"背光亮度","熄屏","返回设置"};
+        const char *const timeout_names[]={"永不","15 秒","30 秒","1 分钟","2 分钟","5 分钟"};
+        char timeout_rows[DISPLAY_TIMEOUT_OPTION_COUNT][32];
+        const char *timeouts[DISPLAY_TIMEOUT_OPTION_COUNT+1];
+        for(size_t i=0;i<DISPLAY_TIMEOUT_OPTION_COUNT;i++) {
+            snprintf(timeout_rows[i],sizeof(timeout_rows[i]),"%s%s",timeout_names[i],i==s_logic.timeout_option?" · 当前":"");
+            timeouts[i]=timeout_rows[i];
+        }
+        timeouts[DISPLAY_TIMEOUT_OPTION_COUNT]="返回显示";
         const char *const network[]={"重新配网","返回设置"};
         const char *const account[]={"退出当前账号","返回设置"};
         const char *const logout[]={"取消，保留登录","确认退出账号"};
@@ -1101,7 +1092,8 @@ static void render_netease_ui(void)
         const char *const *items=nav;size_t n=5;const char *title="翻到哪一页？";const char *detail=NULL;
         switch(s_logic.state) {
         case NETEASE_APP_SETTINGS:items=settings;n=4;title="设置";break;
-        case NETEASE_APP_APPEARANCE:items=appearance;n=4;title="显示与日夜";break;
+        case NETEASE_APP_APPEARANCE:items=appearance;n=3;title="显示与日夜";detail=display_settings_clock_status();break;
+        case NETEASE_APP_SCREEN_TIMEOUT:items=timeouts;n=DISPLAY_TIMEOUT_OPTION_COUNT+1;title="熄屏";break;
         case NETEASE_APP_NETWORK:items=network;n=2;title="网络";detail=s_saved.ssid;break;
         case NETEASE_APP_ACCOUNT:items=account;n=2;title="账号";detail=s_nickname[0]?s_nickname:"网易云音乐账号";break;
         case NETEASE_APP_LOGOUT_CONFIRM:items=logout;n=2;title="退出当前账号？";detail="仅清除登录，保留网络";break;
@@ -1116,12 +1108,13 @@ static void render_netease_ui(void)
             break;
         default:break;
         }
-        if(s_logic.state==NETEASE_APP_BRIGHTNESS)device_music_ui_draw_brightness(screen,s_brightness);
+        if(s_logic.state==NETEASE_APP_BRIGHTNESS)device_music_ui_draw_brightness(screen,display_settings_brightness());
         else if(s_logic.state==NETEASE_APP_NAVIGATION)device_music_ui_draw_menu(screen,title,detail,items,n,s_logic.selected);
         else {
             device_music_ui_preference_t page=DEVICE_MUSIC_PREF_SETTINGS;
             switch(s_logic.state) {
             case NETEASE_APP_APPEARANCE:page=DEVICE_MUSIC_PREF_APPEARANCE;break;
+            case NETEASE_APP_SCREEN_TIMEOUT:page=DEVICE_MUSIC_PREF_SCREEN_TIMEOUT;break;
             case NETEASE_APP_NETWORK:page=DEVICE_MUSIC_PREF_NETWORK;break;
             case NETEASE_APP_ACCOUNT:page=DEVICE_MUSIC_PREF_ACCOUNT;break;
             case NETEASE_APP_LOGOUT_CONFIRM:page=DEVICE_MUSIC_PREF_LOGOUT;break;
@@ -1296,9 +1289,10 @@ void netease_app_enter(void)
     memset(&s_volume_widgets, 0, sizeof(s_volume_widgets));
     memset(s_last_click_tick, 0, sizeof(s_last_click_tick));
     netease_app_logic_init(&s_logic);
+    s_logic.timeout_option=display_timeout_option(display_settings_timeout());
     s_retry_work=NETEASE_WORK_NONE;
     s_active_work=NETEASE_WORK_NONE;
-    s_display_loaded=false;s_display_dirty=false;s_detached_work=false;s_audio_started=false;s_playback_ended=false;
+    s_display_dirty=false;s_detached_work=false;s_audio_started=false;s_playback_ended=false;
     s_prefetch_retry_us=0;
     s_library_loading=false;s_session_expired=false;s_qr_expired=false;s_qr_refresh_requested=false;s_browse_last=false;s_request_cursor=0;
     s_nickname[0]='\0';s_background_error=ESP_OK;s_rendered_soc=-2;
@@ -1341,6 +1335,10 @@ void netease_app_exit(void)
 void netease_app_set_reset_callback(void (*callback)(void))
 {
     s_reset_callback = callback;
+}
+void netease_app_refresh_display(void)
+{
+    s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;render_netease_ui();
 }
 
 static netease_app_button_t map_button(bsp_btn_t btn)
@@ -1442,6 +1440,11 @@ void netease_app_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         if(!s_detached_work)return;
         netease_app_logic_t candidate=s_logic;
         netease_app_action_t pending_action=netease_app_logic_on_button(&candidate,button,event);
+        if(pending_action==NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT) {
+            s_logic=candidate;
+            display_settings_set_timeout(display_timeout_seconds(s_logic.timeout_option));
+            request_work(NETEASE_WORK_SAVE_DISPLAY);s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;render_netease_ui();return;
+        }
         if(pending_action!=NETEASE_APP_ACTION_NONE || candidate.volume_overlay || candidate.state==NETEASE_APP_TRACKS)return;
         s_logic=candidate;render_netease_ui();return;
     }
@@ -1500,14 +1503,13 @@ void netease_app_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     if (action == NETEASE_APP_ACTION_RESET_CLOUD_SETUP) {
         request_work(NETEASE_WORK_RESET_WIFI);return;
     }
-    if (action == NETEASE_APP_ACTION_SET_DAY || action == NETEASE_APP_ACTION_SET_NIGHT) {
-        device_music_ui_set_night(action==NETEASE_APP_ACTION_SET_NIGHT);
+    if(action==NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT) {
+        display_settings_set_timeout(display_timeout_seconds(s_logic.timeout_option));
+        s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
         request_work(NETEASE_WORK_SAVE_DISPLAY);
     } else if (action == NETEASE_APP_ACTION_BRIGHTNESS_UP || action == NETEASE_APP_ACTION_BRIGHTNESS_DOWN) {
-        s_brightness += action==NETEASE_APP_ACTION_BRIGHTNESS_UP?5:-5;
-        if(s_brightness<10)s_brightness=10;
-        if(s_brightness>100)s_brightness=100;
-        bsp_display_backlight(s_brightness);s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
+        display_settings_set_brightness(display_settings_brightness()+(action==NETEASE_APP_ACTION_BRIGHTNESS_UP?5:-5));
+        s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
         request_work(NETEASE_WORK_SAVE_DISPLAY);
     } else if (action == NETEASE_APP_ACTION_RETRY) {
         size_t failed_index=s_url_index;

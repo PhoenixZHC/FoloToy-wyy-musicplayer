@@ -107,6 +107,24 @@ static bool s_buffering;
 void device_music_ui_set_buffering(bool buffering) { s_buffering=buffering; }
 static bool s_connected;
 static unsigned s_signal_level;
+static char s_clock_text[6]="--:--";
+static lv_obj_t *s_clock_label;
+
+static void clock_label_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target(event)==s_clock_label)s_clock_label=NULL;
+}
+
+void device_music_ui_set_clock(int hour,int minute,bool valid)
+{
+    char text[6];
+    if(valid && hour>=0 && hour<24 && minute>=0 && minute<60)
+        snprintf(text,sizeof(text),"%02d:%02d",hour,minute);
+    else memcpy(text,"--:--",sizeof(text));
+    if(strcmp(text,s_clock_text)==0)return;
+    memcpy(s_clock_text,text,sizeof(s_clock_text));
+    if(s_clock_label)lv_label_set_text(s_clock_label,s_clock_text);
+}
 static char s_now_song[128];
 static bool s_now_paused;
 static const lv_image_dsc_t *s_artwork;
@@ -136,20 +154,23 @@ static void folio(lv_obj_t *s,const char *text) { line(s,263,1,device_music_ui_t
 static void draw_header(lv_obj_t *s,const device_music_ui_screen_spec_t *spec)
 {
     const device_music_ui_theme_t *t=device_music_ui_theme();
+    const int text_size=10,text_y=8,text_height=12;
     if(spec->screen!=DEVICE_MUSIC_SCREEN_PLAYLISTS && spec->screen!=DEVICE_MUSIC_SCREEN_TRACKS &&
        spec->screen!=DEVICE_MUSIC_SCREEN_PLAYING && spec->screen!=DEVICE_MUSIC_SCREEN_PAUSED)
-        label(s,"FOLO MUSIC",14,8,88,12,8,t->text,LV_TEXT_ALIGN_LEFT);
+        label(s,"FOLO MUSIC",14,text_y,80,text_height,text_size,t->text,LV_TEXT_ALIGN_LEFT);
+    s_clock_label=label(s,s_clock_text,98,text_y,44,text_height,text_size,t->text,LV_TEXT_ALIGN_CENTER);
+    if(s_clock_label)lv_obj_add_event_cb(s_clock_label,clock_label_deleted,LV_EVENT_DELETE,NULL);
     int soc=bsp_battery_soc();char status[40];
     if(s_connected && soc>=0)snprintf(status,sizeof(status),"%d%%",soc);
     else if(s_connected)snprintf(status,sizeof(status)," ");
     else if(soc>=0)snprintf(status,sizeof(status),"离线 · %d%%",soc);
     else snprintf(status,sizeof(status),"离线");
-    label(s,status,103,8,123,12,8,t->muted_text,LV_TEXT_ALIGN_RIGHT);
+    label(s,status,146,text_y,80,text_height,text_size,t->muted_text,LV_TEXT_ALIGN_RIGHT);
     if(s_connected) {
-        /* Three bars do not require an icon font. */
-        int x=177;
-        label(s,"WiFi",147,8,27,12,8,t->muted_text,LV_TEXT_ALIGN_RIGHT);
-        for(unsigned i=0;i<3;i++)box(s,x+(int)i*4,18-(int)i*3,3,3+(int)i*3,
+        /* 信号条底部对齐 WiFi 字体基线，避免受字号行高留白影响。 */
+        int x=177,bottom=text_y+font_px(text_size)->line_height-font_px(text_size)->base_line;
+        label(s,"WiFi",147,text_y,27,text_height,text_size,t->muted_text,LV_TEXT_ALIGN_RIGHT);
+        for(unsigned i=0;i<3;i++)box(s,x+(int)i*4,bottom-(3+(int)i*3),3,3+(int)i*3,
             i<s_signal_level?t->text:t->divider,0);
     }
     box(s,14,23,212,1,t->divider,0);
@@ -434,6 +455,7 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
     const char *eye="PREFERENCES / 设置",*title="按你的习惯。";
     switch(page) {
     case DEVICE_MUSIC_PREF_APPEARANCE:eye="DISPLAY / 显示";title="白天与夜晚。";break;
+    case DEVICE_MUSIC_PREF_SCREEN_TIMEOUT:eye="SCREEN / 熄屏";title="让屏幕歇一会。";break;
     case DEVICE_MUSIC_PREF_NETWORK:eye="NETWORK / 网络";title="连接着的世界。";break;
     case DEVICE_MUSIC_PREF_ACCOUNT:eye="ACCOUNT / 账号";title="这本，属于你。";break;
     case DEVICE_MUSIC_PREF_LOGOUT:case DEVICE_MUSIC_PREF_RESET_WIFI:eye="CONFIRM / 确认";title=page==DEVICE_MUSIC_PREF_LOGOUT?"退出这个账号？":"重新配置网络？";break;
@@ -462,10 +484,13 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
         label(s,"已到列表末尾。",15,153,210,18,10,t->muted_text,LV_TEXT_ALIGN_LEFT);y=180;
     }
     menu_rows(s,items,n,selected,y);
-    folio(s,page==DEVICE_MUSIC_PREF_LOGOUT || page==DEVICE_MUSIC_PREF_RESET_WIFI?"默认取消 · OK 确认":"长按 OK · 返回");
+    const char *hint=page==DEVICE_MUSIC_PREF_LOGOUT || page==DEVICE_MUSIC_PREF_RESET_WIFI?"默认取消 · OK 确认":"长按 OK · 返回";
+    if(page==DEVICE_MUSIC_PREF_SCREEN_TIMEOUT)hint="按任意键唤醒 · 音乐继续";
+    folio(s,hint);
     if(page==DEVICE_MUSIC_PREF_APPEARANCE) {
+        label(s,"07:00-19:00 日间，其余夜间",15,229,210,18,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
         box(s,15,263,210,28,t->background,0);line(s,263,1,t->divider);
-        label(s,"配色与背光分开调整",15,271,210,14,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
+        label(s,detail?detail:"日夜跟随北京时间自动切换",15,271,210,14,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
     }
     device_music_ui_footer_t footer={"上移",page==DEVICE_MUSIC_PREF_ABOUT?"返回":"确认","下移"};draw_footer(s,&footer);
 }

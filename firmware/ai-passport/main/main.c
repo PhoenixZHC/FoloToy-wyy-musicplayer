@@ -8,6 +8,7 @@
 #include "wifi_provisioning_page.h"
 #include "lvgl.h"
 #include "device_music_ui.h"
+#include "display_settings.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 
@@ -24,6 +25,15 @@ static bool s_page_active;
 static lv_obj_t *s_welcome;
 
 static void enter_netease_app(void);
+
+static void refresh_display(void)
+{
+    if(s_page==APP_PAGE_WELCOME && s_welcome) {
+        device_music_ui_reset_screen(s_welcome,DEVICE_MUSIC_SCREEN_SETUP);
+        device_music_ui_draw_notice(s_welcome,DEVICE_MUSIC_NOTICE_WELCOME,NULL);
+    } else if(s_page_active && s_page==APP_PAGE_CLOUD_SETUP)wifi_provisioning_page_refresh_display();
+    else if(s_page_active && s_page==APP_PAGE_NETEASE)netease_app_refresh_display();
+}
 
 static void close_active_page(void)
 {
@@ -59,6 +69,7 @@ static void enter_netease_app(void)
 static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
     (void)user;
     if (!bsp_lvgl_lock(500)) return;
+    if(display_settings_on_key(ev)) { bsp_lvgl_unlock();return; }
 
     if(s_page==APP_PAGE_WELCOME) {
         if(btn==BSP_BTN_OK && ev==BSP_BTN_CLICK)enter_cloud_setup();
@@ -100,6 +111,11 @@ void app_main(void) {
 
     bool has_cloud_config = wifi_provisioning_page_has_saved_config();
     if (bsp_lvgl_lock(1000)) {
+        esp_err_t display_err=display_settings_init(refresh_display);
+        if(display_err!=ESP_OK) {
+            ESP_LOGE(TAG,"显示设置初始化失败: %s",esp_err_to_name(display_err));
+            bsp_lvgl_unlock();return;
+        }
         if (wifi_provisioning_page_setup_requested()) {
             enter_cloud_setup();
         } else if (!has_cloud_config) {

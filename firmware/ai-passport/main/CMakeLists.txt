@@ -8,6 +8,7 @@ idf_component_register(
 	         "ui_pixel_math.c"
 	         "device_music_ui_spec.c"
 	         "device_music_ui.c"
+                 "display_policy.c" "display_settings.c"
 	         "fonts/netease_ui_font_8.c"
 	         "fonts/netease_ui_font_9.c"
 	         "fonts/netease_ui_font_10.c"

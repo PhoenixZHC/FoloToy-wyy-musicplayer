@@ -11,3 +11,5 @@ void wifi_provisioning_page_exit(void);
 void wifi_provisioning_page_key(bsp_btn_t btn, bsp_btn_ev_t ev);
 bool wifi_provisioning_page_has_saved_config(void);
 void wifi_provisioning_page_set_complete_callback(void (*callback)(void));
+/* 调用方持有 LVGL 锁。 */
+void wifi_provisioning_page_refresh_display(void);

@@ -1,10 +1,12 @@
-# Folo Music 2.0
+# Folo Music 2.1
 
 把 FoloToy AI Passport 变成独立的网易云音乐播放器。设备通过开源 EAPI/WEAPI 协议直接访问网易云和音频 CDN，无需部署中转服务。支持设备选网、扫码登录、歌单浏览、音乐播放、封面与同步歌词。
 
 ## 下载与安装
 
-当前正式版：2.0（标签：v2.0-folo-music）。
+当前源码及本地固件：2.1（2026-11-01），包含自动熄屏、自动日夜、居中时钟及统一状态条。完整镜像位于 release/FoloMusic-v2.1/FoloMusic-v2.1-full-8MB.bin，校验值见同目录 SHA256SUMS.txt。
+
+[2.1 说明](docs/releases/v2.1.md)。以下远端链接保留为此前已发布的 2.0（标签：v2.0-folo-music）：
 
 [正式版本页面](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/tag/v2.0-folo-music) · [完整 8 MB 固件](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/download/v2.0-folo-music/FoloMusic-v2.0-full-8MB.bin)。
 
@@ -25,6 +27,8 @@
 6. 长按 OK 打开导航，快速返回播放页、歌曲列表、歌单和设置；子菜单长按 OK 返回。
 7. 设置支持日夜配色、亮度、网络与账号。断网/错误页按↓可进入网络设置重新选网。
 
+当前源码在「设置 → 显示与日夜 → 熄屏」设置自动熄屏时间：永不、15 秒、30 秒、1/2/5 分钟，默认 1 分钟，重启后保留。无按键操作达到设定时间后关闭背光，音乐继续播放；任意功能键唤醒并恢复原亮度，唤醒这次按键不执行其他操作。日夜配色跟随系统时间，按北京时间 07:00-19:00 使用日间，其余时间使用夜间；联网校时前明确提示等待，并暂用上次配色。所有页面顶部中央持续显示北京时间 HH:mm，未校时显示 --:--；名称、时间、WiFi 和电量统一使用 10 像素字号、相同行高与文字基线，信号条底部对齐文字。这些改动已包含在 2.1 本地固件中。
+
 ## 功能与边界
 
 - 日夜两种配色，支持 Wi-Fi 信号图标、播放进度、音量调节和三键操作提示。
@@ -43,7 +47,7 @@
     docs/prototypes/            HTML 设计与预览
     docs/releases/              正式版本说明
     docs/archive/               历史开发状态和旧部署说明
-    release/FoloMusic-v2.0/      本机生成的发布附件（不提交二进制）
+    release/FoloMusic-v2.1/      本机生成的固件产物（不提交二进制）
     server/                     旧中转服务源码，保留兼容
     netease-official-firmware/   官方平台历史实验，不是当前方案
 
@@ -57,11 +61,11 @@
     idf.py -B build-direct -D SDKCONFIG=build-direct/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.direct.defaults" build
     idf.py -B build-direct merge-bin -o build-direct/FoloToy-Wangyiyun-full.bin
     python tools/verify_firmware.py build-direct
-    python tools/package_release.py build-direct ../../release/FoloMusic-v2.0
+    python tools/package_release.py build-direct ../../release/FoloMusic-v2.1
 
-默认 Kconfig 保留旧中转兼容选项；正式 2.0 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
+默认 Kconfig 保留旧中转兼容选项；2.1 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
 
-[文档索引](docs/README.md) · [2.0 发布说明](docs/releases/v2.0.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
+[文档索引](docs/README.md) · [2.1 说明](docs/releases/v2.1.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
 
 ## 开源方案与致谢
 

@@ -1,10 +1,11 @@
 # 文档索引
 
-当前正式版本：**Folo Music 2.0**，设备开源协议直连网易云。历史方案及诊断材料不代表当前部署方式。
+当前源码及本地固件：**Folo Music 2.1**，设备开源协议直连网易云。历史方案及诊断材料不代表当前部署方式。
 
 ## 使用与开发
 
 - [项目说明](../README.md)：功能、目录和按键。
+- [2.1 本地固件说明](releases/v2.1.md)：新增功能、完整镜像及验收边界。
 - [2.0 发布说明](releases/v2.0.md)：下载文件、兼容性与已知限制。
 - [部署与构建](deployment.md)：8 MiB 出厂烧录和保留设置升级。
 - [架构](../ARCHITECTURE.md)：设备、网络、媒体、字库与历史中转边界。
@@ -22,4 +23,4 @@
 - [历次开发状态](archive/development-status-2026-10.md)：保留过程记录供追溯。
 - [播放器实施过程](archive/player-implementation-notes-2026-10.md)：候选版本、调试及开发沟通记录。
 
-旧中转服务源码位于 server/，官方平台实验位于 netease-official-firmware/，均为历史兼容材料，不是 2.0 必需组件。
+旧中转服务源码位于 server/，官方平台实验位于 netease-official-firmware/，均为历史兼容材料，不是 2.1 必需组件。

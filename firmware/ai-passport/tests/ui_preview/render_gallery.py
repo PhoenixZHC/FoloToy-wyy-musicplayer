@@ -8,6 +8,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 VIEWS = "welcome wifi wifiempty wifipassword wifikeylower wifikeyupper wifikeynumber wifivisible wifiinvalid wifiactions connecting qr scanned expired signedin restore library playlists list loading emptylibrary empty player paused buffering menu volume end settings appearance brightness network account logout resetwifi about wififail loadfail playfail unavailable offline session longtitle longartist artwork lyrics longlyrics expandedfont expandedlist".split()
 
+VIEWS += ["timeout", "timeoutnever", "timeoutback", "clockwaiting"]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)

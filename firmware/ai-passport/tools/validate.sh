@@ -39,6 +39,9 @@ run_static_checks() {
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_netease_app_logic.c main/netease_app_logic.c \
         -o "${test_dir}/test_netease_app_logic"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_display_policy.c main/display_policy.c \
+        -o "${test_dir}/test_display_policy"
 	    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
 	        tests/test_music_lyrics.c main/music_lyrics.c \
 	        -o "${test_dir}/test_music_lyrics"
@@ -75,13 +78,14 @@ run_static_checks() {
         tests/test_wifi_provisioning_portal.c main/wifi_provisioning_portal.c \
         -o "${test_dir}/test_wifi_provisioning_portal_direct"
     "${test_dir}/test_wifi_provisioning_portal_direct"
+    "${test_dir}/test_display_policy"
     DIRECT_TEST_OUT="${test_dir}/test_netease_direct" bash tools/run_direct_host_tests.sh
     if [[ "${KEEP_VALIDATION_ARTIFACTS:-0}" != 1 ]]; then
         rm -rf "${test_dir}"
     else
         echo "Host artifacts: ${test_dir}"
     fi
-    echo "Host tests: PASS (12 executables)"
+    echo "Host tests: PASS (13 executables)"
 }
 
 run_firmware_checks() (

@@ -2,8 +2,34 @@
 #include "netease_app_logic.h"
 #define CLICK(b) netease_app_logic_on_button(&l,NETEASE_APP_BTN_##b,NETEASE_APP_BTN_CLICK)
 #define LONG(b) netease_app_logic_on_button(&l,NETEASE_APP_BTN_##b,NETEASE_APP_BTN_LONG)
+static void test_screen_timeout_menu(void)
+{
+    for(int playing=0;playing<2;playing++) {
+        netease_app_logic_t l;netease_app_logic_init(&l);
+        netease_app_logic_set_tracks(&l,5);l.selected=2;
+        netease_app_logic_set_playing(&l);l.playing=playing!=0;
+        LONG(OK);CLICK(DOWN);CLICK(DOWN);CLICK(OK);
+        assert(l.state==NETEASE_APP_SETTINGS);
+        CLICK(OK);assert(l.state==NETEASE_APP_APPEARANCE);
+        CLICK(DOWN);assert(CLICK(OK)==NETEASE_APP_ACTION_NONE);
+        assert(l.state==NETEASE_APP_SCREEN_TIMEOUT && l.selected==3);
+        CLICK(DOWN);CLICK(DOWN);
+        assert(l.timeout_option==3); /* 浏览不改变已保存选项。 */
+        assert(CLICK(OK)==NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT && l.timeout_option==5);
+        assert(l.state==NETEASE_APP_SCREEN_TIMEOUT && l.playing==(playing!=0));
+        LONG(OK);assert(l.state==NETEASE_APP_APPEARANCE);
+        CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_SCREEN_TIMEOUT && l.selected==5);
+        CLICK(DOWN);CLICK(DOWN);assert(l.selected==6);CLICK(OK);
+        assert(l.state==NETEASE_APP_APPEARANCE);LONG(OK);
+        for(int i=0;i<6;i++)CLICK(DOWN);
+        assert(l.selected==3);CLICK(OK);assert(l.state==NETEASE_APP_ABOUT);
+        LONG(OK);LONG(OK);assert(l.state==NETEASE_APP_PLAYING && l.selected==2);
+        assert(l.playing==(playing!=0) && l.playing_index==2 && !l.volume_overlay);
+    }
+}
 int main(void)
 {
+    test_screen_timeout_menu();
     netease_app_logic_t l;netease_app_logic_init(&l);
     assert(netease_app_logic_dispatch_button(&l,NETEASE_APP_BTN_OK,NETEASE_APP_BTN_LONG,true)==NETEASE_APP_ACTION_NONE);
     netease_app_logic_set_playlists(&l,10);LONG(DOWN);assert(l.selected==5);
@@ -21,7 +47,8 @@ int main(void)
     LONG(OK);CLICK(OK);assert(l.selected==1 && l.state==NETEASE_APP_PLAYING);
     LONG(OK);CLICK(DOWN);CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_SETTINGS);
     CLICK(OK);assert(l.state==NETEASE_APP_APPEARANCE);
-    CLICK(DOWN);assert(CLICK(OK)==NETEASE_APP_ACTION_SET_NIGHT);
+    CLICK(OK);assert(l.state==NETEASE_APP_BRIGHTNESS);
+    assert(CLICK(DOWN)==NETEASE_APP_ACTION_BRIGHTNESS_DOWN);LONG(OK);
     LONG(OK);CLICK(DOWN);CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_ACCOUNT);
     CLICK(OK);assert(l.state==NETEASE_APP_LOGOUT_CONFIRM && l.selected==0);
     CLICK(OK);assert(l.state==NETEASE_APP_ACCOUNT);

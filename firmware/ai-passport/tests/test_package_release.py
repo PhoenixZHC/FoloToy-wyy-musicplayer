@@ -19,7 +19,7 @@ class PackageTests(unittest.TestCase):
         self.output = Path(self.temp.name) / "output"
         (self.build / "bootloader").mkdir(parents=True)
         (self.build / "partition_table").mkdir()
-        self.description = dict(project_version="2.0", target="esp32c3")
+        self.description = dict(project_version="2.1", target="esp32c3")
         (self.build / "project_description.json").write_text(json.dumps(self.description))
         (self.build / "sdkconfig").write_text("CONFIG_NETEASE_DIRECT=y\nCONFIG_ESPTOOLPY_FLASHSIZE_8MB=y\n")
         (self.build / "bootloader/bootloader.bin").write_bytes(b"test-bootloader")
@@ -37,7 +37,7 @@ class PackageTests(unittest.TestCase):
 
     def test_full_layout_blank_nvs_and_checksums(self):
         manifest = release.package(self.build, self.output)
-        data = (self.output / "FoloMusic-v2.0-full-8MB.bin").read_bytes()
+        data = (self.output / "FoloMusic-v2.1-full-8MB.bin").read_bytes()
         self.assertEqual(len(data), 8388608)
         self.assertEqual(data[0x10000:0x10000+len(self.app)], self.app)
         self.assertEqual(data[0x9000:0x10000], b"\xff" * 0x7000)
@@ -69,7 +69,7 @@ class PackageTests(unittest.TestCase):
 
     def test_existing_artifact_is_not_overwritten(self):
         release.package(self.build, self.output)
-        full = self.output / "FoloMusic-v2.0-full-8MB.bin"
+        full = self.output / "FoloMusic-v2.1-full-8MB.bin"
         before = full.read_bytes()
         sums = self.output / "SHA256SUMS.txt"
         sums.write_text("existing-different-manifest\n")

@@ -340,6 +340,10 @@ static void render(void)
     ESP_LOGI(TAG, "Local Wi-Fi UI page=%u; lv_free=%u; lv_largest=%u",
              (unsigned)s_page, (unsigned)memory.free_size, (unsigned)memory.free_biggest_size);
 }
+void wifi_provisioning_page_refresh_display(void)
+{
+    s_dirty=true;render();
+}
 static void tick(lv_timer_t *timer)
 {
     (void)timer;

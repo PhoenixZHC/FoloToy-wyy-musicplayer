@@ -22,6 +22,7 @@ typedef enum {
     NETEASE_APP_WIFI_CONFIRM,
     NETEASE_APP_ABOUT,
     NETEASE_APP_ENDED,
+    NETEASE_APP_SCREEN_TIMEOUT,
 } netease_app_state_t;
 
 typedef enum {
@@ -45,11 +46,10 @@ typedef enum {
     NETEASE_APP_ACTION_VOLUME_DOWN,
     NETEASE_APP_ACTION_SWITCH_ACCOUNT,
     NETEASE_APP_ACTION_RESET_CLOUD_SETUP,
-    NETEASE_APP_ACTION_SET_DAY,
-    NETEASE_APP_ACTION_SET_NIGHT,
     NETEASE_APP_ACTION_BRIGHTNESS_UP,
     NETEASE_APP_ACTION_BRIGHTNESS_DOWN,
     NETEASE_APP_ACTION_RETRY,
+    NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT,
 } netease_app_action_t;
 
 typedef struct {
@@ -59,6 +59,7 @@ typedef struct {
     bool playing;
     bool volume_overlay;
     bool has_player;
+    size_t timeout_option;
     size_t playlist_cursor, playlist_count;
     size_t track_cursor, track_count, playing_index, playing_count;
     netease_app_state_t return_state, error_return_state;

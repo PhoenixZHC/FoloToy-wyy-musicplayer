@@ -4,7 +4,7 @@
 
 # 自动构建与发布（CI / Build & Release）
 
-> Folo Music 2.0 产品发布使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为 2.0 发布命令。正式直连构建、严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 4 个打包回归；3 个字体测试与 98 次预览仍单独运行。
+> Folo Music 2.1 产品发布使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为 2.1 构建命令。正式直连构建、严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 4 个打包回归；3 个字体测试与 106 次预览仍单独运行。
 
 本仓库提供一套基于 GitHub Actions 的自动构建与发布流水线，用于在打 tag 时自动编译固件并发布 Release。
 

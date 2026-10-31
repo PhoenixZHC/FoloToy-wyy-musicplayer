@@ -4,7 +4,7 @@
 
 # Automated Build and Release
 
-> Folo Music 2.0 uses ESP-IDF 5.5.4 and explicitly selects sdkconfig.direct.defaults. The 5.5.3/default build below is the upstream baseline, not the product release command. See the [product deployment guide](../../../../docs/deployment.md) for direct builds, exact-8-MiB packaging and settings-preservation rules. Static validation also runs four packaging regressions; three font tests and 98 previews run separately.
+> Folo Music 2.1 uses ESP-IDF 5.5.4 and explicitly selects sdkconfig.direct.defaults. The 5.5.3/default build below is the upstream baseline, not the product release command. See the [product deployment guide](../../../../docs/deployment.md) for direct builds, exact-8-MiB packaging and settings-preservation rules. Static validation also runs four packaging regressions; three font tests and 106 previews run separately.
 
 `.github/workflows/build-firmware.yml` builds and publishes firmware for tags and supports manual dispatch. Ordinary branch pushes do not trigger it. Keep this page synchronized with the workflow.
 

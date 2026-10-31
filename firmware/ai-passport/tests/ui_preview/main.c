@@ -52,6 +52,21 @@ int main(int argc,char **argv)
     device_music_ui_set_night(strcmp(argv[2],"night")==0);device_music_ui_set_network(strcmp(argv[1],"offline")!=0 && strcmp(argv[1],"wififail")!=0,3);
     device_music_screen_t id=strcmp(argv[1],"qr")==0?DEVICE_MUSIC_SCREEN_QR_LOGIN:strcmp(argv[1],"scanned")==0?DEVICE_MUSIC_SCREEN_LOGIN_WAITING:strcmp(argv[1],"loading")==0?DEVICE_MUSIC_SCREEN_LOADING_TRACK:strcmp(argv[1],"error")==0?DEVICE_MUSIC_SCREEN_PLAY_FAILED:strcmp(argv[1],"list")==0?DEVICE_MUSIC_SCREEN_TRACKS:strcmp(argv[1],"paused")==0?DEVICE_MUSIC_SCREEN_PAUSED:DEVICE_MUSIC_SCREEN_PLAYING;
     lv_obj_t *screen=device_music_ui_create_screen(id);
+    if(!strcmp(argv[1],"appearance")) {
+        device_music_ui_set_clock(23,59,true);assert(find_label(screen,"23:59"));
+        device_music_ui_set_clock(0,0,true);assert(find_label(screen,"00:00"));
+        assert(device_music_ui_reset_screen(screen,id));
+        assert(find_label(screen,"00:00"));
+        device_music_ui_set_clock(0,1,true);assert(find_label(screen,"00:01"));
+        lv_obj_delete(screen);
+        device_music_ui_set_clock(0,2,true);
+        screen=device_music_ui_create_screen(id);assert(find_label(screen,"00:02"));
+        lv_obj_t *previous=screen;
+        screen=device_music_ui_create_screen(id);
+        lv_obj_delete(previous);
+        device_music_ui_set_clock(0,3,true);assert(find_label(screen,"00:03"));
+    }
+    device_music_ui_set_clock(16,42,strcmp(argv[1],"clockwaiting")!=0);
     const char *const notices[]={"welcome","restore","library","signedin","expired","session","offline","unavailable","loadfail","playfail"};
     int notice=-1;for(size_t i=0;i<sizeof(notices)/sizeof(notices[0]);i++)if(strcmp(argv[1],notices[i])==0)notice=(int)i;
     if(notice>=0)device_music_ui_draw_notice(screen,(device_music_ui_notice_t)notice,notice==DEVICE_MUSIC_NOTICE_SIGNED_IN?"预览听众":NULL);
@@ -122,6 +137,17 @@ int main(int argc,char **argv)
         const char *const logout[]={"取消，保留登录","确认退出账号"};
         bool net=strcmp(argv[1],"network")==0,confirm=strcmp(argv[1],"logout")==0;
         device_music_ui_draw_preferences(screen,net?DEVICE_MUSIC_PREF_NETWORK:confirm?DEVICE_MUSIC_PREF_LOGOUT:DEVICE_MUSIC_PREF_SETTINGS,"Home Wi-Fi","preview",net?network:confirm?logout:settings,net||confirm?2:4,0);
+        if(!net && !confirm) {
+            assert(find_label(screen,"显示与日夜"));
+            assert(!find_label(screen,"熄屏"));
+        }
+    }
+    else if(strcmp(argv[1],"timeout")==0 || strcmp(argv[1],"timeoutnever")==0 || strcmp(argv[1],"timeoutback")==0) {
+        const char *const items[]={"永不","15 秒","30 秒","1 分钟 · 当前","2 分钟","5 分钟","返回显示"};
+        size_t selected=!strcmp(argv[1],"timeoutnever")?0:!strcmp(argv[1],"timeoutback")?6:3;
+        device_music_ui_draw_preferences(screen,DEVICE_MUSIC_PREF_SCREEN_TIMEOUT,NULL,"preview",items,7,selected);
+        assert(find_label(screen,items[selected]));
+        assert(find_label(screen,"按任意键唤醒 · 音乐继续"));
     }
     else if(strcmp(argv[1],"wifi")==0 || strcmp(argv[1],"wifiempty")==0) {
         const char *names[]={"Home Wi-Fi", "客厅无线网络", "Studio-Guest", "Music Room", "第五个网络"};
@@ -149,13 +175,15 @@ int main(int argc,char **argv)
         device_music_ui_set_footer(screen,"上移","打开","下移");
     }
     else if(strcmp(argv[1],"emptylibrary")==0) {device_music_ui_draw_list(screen,DEVICE_MUSIC_SCREEN_PLAYLISTS,NULL,NULL,NULL,0);device_music_ui_set_footer(screen,"—","刷新","—");}
-    else if(strcmp(argv[1],"end")==0 || strcmp(argv[1],"appearance")==0 || strcmp(argv[1],"account")==0 || strcmp(argv[1],"resetwifi")==0 || strcmp(argv[1],"about")==0) {
-        const char *const appearance[]={"日间 · 暖纸","夜间 · 深棕","背光亮度","返回设置"};
+    else if(strcmp(argv[1],"end")==0 || strcmp(argv[1],"appearance")==0 || strcmp(argv[1],"clockwaiting")==0 || strcmp(argv[1],"account")==0 || strcmp(argv[1],"resetwifi")==0 || strcmp(argv[1],"about")==0) {
+        const char *const appearance[]={"背光亮度","熄屏","返回设置"};
         const char *const end[]={"从头播放","返回歌曲列表"};
         const char *const account[]={"退出当前账号","返回设置"};
         const char *const reset[]={"取消，保留网络","确认重新配网"};
-        bool a=strcmp(argv[1],"appearance")==0,e=strcmp(argv[1],"end")==0,r=strcmp(argv[1],"resetwifi")==0,b=strcmp(argv[1],"about")==0;
-        device_music_ui_draw_preferences(screen,a?DEVICE_MUSIC_PREF_APPEARANCE:e?DEVICE_MUSIC_PREF_END:r?DEVICE_MUSIC_PREF_RESET_WIFI:b?DEVICE_MUSIC_PREF_ABOUT:DEVICE_MUSIC_PREF_ACCOUNT,b?"开源协议直连":"预览听众","2.0",a?appearance:e?end:r?reset:b?NULL:account,b?0:a?4:2,0);
+        bool a=strcmp(argv[1],"appearance")==0 || strcmp(argv[1],"clockwaiting")==0,e=strcmp(argv[1],"end")==0,r=strcmp(argv[1],"resetwifi")==0,b=strcmp(argv[1],"about")==0;
+        const char *clock=!strcmp(argv[1],"clockwaiting")?"等待联网校时 · 暂用上次配色":device_music_ui_is_night()?"北京时间 · 自动夜间":"北京时间 · 自动日间";
+        device_music_ui_draw_preferences(screen,a?DEVICE_MUSIC_PREF_APPEARANCE:e?DEVICE_MUSIC_PREF_END:r?DEVICE_MUSIC_PREF_RESET_WIFI:b?DEVICE_MUSIC_PREF_ABOUT:DEVICE_MUSIC_PREF_ACCOUNT,a?clock:b?"开源协议直连":"预览听众","2.1",a?appearance:e?end:r?reset:b?NULL:account,b?0:a?3:2,a?1:0);
+        if(a) { assert(find_label(screen,"熄屏"));assert(find_label(screen,clock)); }
     }
     else if(strcmp(argv[1],"empty")==0) { device_music_ui_draw_list(screen,DEVICE_MUSIC_SCREEN_TRACKS,"夜行电台","0 / 0",NULL,0);device_music_ui_set_footer(screen,"—","返回歌单","—"); }
     else if(strcmp(argv[1],"brightness")==0) { device_music_ui_draw_brightness(screen,45); }
@@ -169,7 +197,32 @@ int main(int argc,char **argv)
         assert(find_label(screen,"FOLO MUSIC")==NULL);
         assert(find_label(screen,"顺序播放")==NULL);
     }
-    if(!strcmp(argv[1],"about"))assert(find_label(screen,"2.0")!=NULL);
+    if(!strcmp(argv[1],"about"))assert(find_label(screen,"2.1")!=NULL);
+    lv_obj_update_layout(screen);
+    lv_obj_t *clock=find_label(screen,strcmp(argv[1],"clockwaiting")==0?"--:--":"16:42");
+    assert(clock && lv_obj_get_x(clock)+lv_obj_get_width(clock)/2==120);
+    const lv_font_t *status_font=lv_obj_get_style_text_font(clock,0);
+    for(uint32_t i=0;i<lv_obj_get_child_count(screen);i++) {
+        lv_obj_t *child=lv_obj_get_child(screen,i);
+        if(lv_obj_check_type(child,&lv_label_class) && lv_obj_get_y(child)<24) {
+            assert(lv_obj_get_style_text_font(child,0)==status_font);
+            assert(lv_obj_get_y(child)==lv_obj_get_y(clock));
+            assert(lv_obj_get_height(child)==lv_obj_get_height(clock));
+        }
+    }
+    lv_obj_t *wifi=find_label(screen,"WiFi");
+    if(wifi) {
+        const lv_font_t *font=lv_obj_get_style_text_font(wifi,0);
+        int bottom=lv_obj_get_y(wifi)+font->line_height-font->base_line;
+        unsigned bars=0;
+        for(uint32_t i=0;i<lv_obj_get_child_count(screen);i++) {
+            lv_obj_t *child=lv_obj_get_child(screen,i);
+            if(lv_obj_get_width(child)==3 && lv_obj_get_x(child)>=177 && lv_obj_get_x(child)<=185 && lv_obj_get_y(child)<24) {
+                assert(lv_obj_get_y(child)+lv_obj_get_height(child)==bottom);bars++;
+            }
+        }
+        assert(bars==3);
+    }
     if(missing_glyphs(screen))return 4;
     lv_screen_load(screen);lv_refr_now(display);
     FILE *f=fopen(argv[3],"wb");if(!f)return 3;

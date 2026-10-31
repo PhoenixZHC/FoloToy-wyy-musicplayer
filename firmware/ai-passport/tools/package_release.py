@@ -13,7 +13,7 @@ IMAGES = ((0, "bootloader/bootloader.bin"),
           (0x8000, "partition_table/partition-table.bin"),
           (APP_OFFSET, "FoloToy-Wangyiyun.bin"))
 
-def package(build, output, version="2.0"):
+def package(build, output, version="2.1"):
     description = json.loads((build / "project_description.json").read_text())
     if description["project_version"] != version or description["target"] != "esp32c3":
         raise ValueError("Unexpected project version or target")
