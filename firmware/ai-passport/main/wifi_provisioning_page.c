@@ -175,7 +175,8 @@ static esp_err_t start_wifi(void)
         err = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, NULL, &s_ip_handler);
         if (err != ESP_OK) return err;
     }
-    (void)esp_wifi_set_ps(WIFI_PS_NONE);
+    err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err != ESP_OK) return err;
     err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if (err == ESP_OK) err = esp_wifi_set_mode(WIFI_MODE_STA);
     if (err == ESP_OK) err = esp_wifi_start();

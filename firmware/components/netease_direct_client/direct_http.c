@@ -26,6 +26,11 @@ static void release_http(void)
 {
     if(reusable_http) { esp_http_client_cleanup(reusable_http);reusable_http=NULL; }
 }
+
+void netease_direct_client_release_connection(void)
+{
+    release_http();
+}
 /* Single-worker bounded ID cache. Cleared whenever the account changes. */
 #define PLAYLIST_ID_CACHE_CAP 512
 static struct { int64_t playlist, user; uint32_t total, start, count; int64_t *ids; time_t loaded_at; } id_cache;

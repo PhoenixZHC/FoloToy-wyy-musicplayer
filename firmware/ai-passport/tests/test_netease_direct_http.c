@@ -10,6 +10,7 @@ struct fake_http { esp_http_client_config_t config; };
 static struct fake_http fake;
 static unsigned calls, erases, commits;
 static unsigned connections;
+static unsigned cleanups;
 static int http_status = 200;
 static esp_err_t transport_error, commit_error;
 static unsigned fail_headers;
@@ -97,7 +98,7 @@ esp_err_t esp_http_client_perform(esp_http_client_handle_t h)
     return ESP_OK;
 }
 int esp_http_client_get_status_code(esp_http_client_handle_t h) { (void)h; return http_status; }
-esp_err_t esp_http_client_cleanup(esp_http_client_handle_t h) { (void)h; return ESP_OK; }
+esp_err_t esp_http_client_cleanup(esp_http_client_handle_t h) { (void)h; ++cleanups; return ESP_OK; }
 esp_err_t esp_http_client_set_user_data(esp_http_client_handle_t h,void *data)
 { h->config.user_data=data;return ESP_OK; }
 esp_err_t esp_http_client_set_url(esp_http_client_handle_t h,const char *url)
@@ -215,6 +216,15 @@ int main(void)
     assert(request("/weapi/test","{}",false,NULL,NULL)==ESP_OK);
     assert(request("/weapi/test2","{}",false,NULL,NULL)==ESP_OK);
     assert(connections==opened+1 && reusable_http && !fake.config.user_data);
+    unsigned cleaned=cleanups, saved_commits=commits, saved_erases=erases;
+    netease_direct_client_release_connection();
+    assert(!reusable_http && cleanups==cleaned+1);
+    netease_direct_client_release_connection();
+    assert(cleanups==cleaned+1 && commits==saved_commits && erases==saved_erases);
+    assert(session.user_id==123 && strstr(session.cookie,"MUSIC_U=new"));
+    assert(request("/weapi/test2","{}",false,NULL,NULL)==ESP_OK);
+    assert(connections==opened+2 && reusable_http);
+    ++opened;
     transport_error=ESP_FAIL;
     assert(request("/weapi/test3","{}",false,NULL,NULL)==ESP_FAIL && !reusable_http);
     transport_error=ESP_OK;

@@ -4,6 +4,14 @@
 
 # Changelog
 
+## 2.1.1 — 2026-11-03 (local build)
+
+- Disable Wi-Fi modem sleep during playback and check configuration errors.
+- Separate audio downloading from decoding with a bounded 16 KiB queue, 8 KiB prebuffer and visible rebuffering; suspend speculative metadata prefetch during audio activity.
+- Add bounded Wi-Fi reconnection and validated HTTP byte-range recovery without resetting the decoder. Distinguish temporary timeouts and incomplete bodies from normal song completion.
+- Following low-memory evidence on hardware, release idle API TLS before audio starts and after explicit browsing during playback, preserving the account and metadata caches.
+- Add concurrent network-fault regressions and a [hotspot device acceptance guide](development/hotspot-playback.md). Full flashing, basic playback and automatic track advance were tested on hardware; deliberate disconnection, outdoor behavior and power validation remain pending.
+
 ## 2.1 — 2026-11-01
 
 - Add an automatic screen-off timeout under Settings > Display and day/night: never, 15 or 30 seconds, or 1, 2 or 5 minutes (default: 1 minute), saved across restarts. Music continues with the display off; the first key action only wakes the screen.

@@ -27,6 +27,7 @@ server/.env.*
 # Firmware build caches and generated dependencies
 /release/FoloMusic-v*/
 **/build/
+/firmware/ai-passport/build-hotspot/
 **/managed_components/
 **/sdkconfig
 **/sdkconfig.old

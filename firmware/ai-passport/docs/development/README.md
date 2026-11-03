@@ -11,6 +11,7 @@ This directory contains AI Passport engineering rules and reusable workflows. Ru
 - [agent-guide.md](agent-guide.md): AI-assisted development workflow.
 - [environment-setup.md](environment-setup.md): clean-machine bootstrap for AI agents, including international and mainland China download routes.
 - [build-and-test.md](build-and-test.md): ESP-IDF build and validation.
+- [hotspot-playback.md](hotspot-playback.md): Folo Music buffering, reconnection, HTTP recovery and device acceptance.
 - [coding-conventions.md](coding-conventions.md): source-code and resource conventions.
 - [CI-validation.md](CI-validation.md): pull-request and main-branch checks.
 - [CI-build-and-release.md](CI-build-and-release.md): tagged firmware builds and releases.

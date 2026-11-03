@@ -1,12 +1,14 @@
-# Folo Music 2.1
+# Folo Music 2.1.1
 
 把 FoloToy AI Passport 变成独立的网易云音乐播放器。设备通过开源 EAPI/WEAPI 协议直接访问网易云和音频 CDN，无需部署中转服务。支持设备选网、扫码登录、歌单浏览、音乐播放、封面与同步歌词。
 
 ## 下载与安装
 
-当前源码及本地固件：2.1（2026-11-01），包含自动熄屏、自动日夜、居中时钟及统一状态条。完整镜像位于 release/FoloMusic-v2.1/FoloMusic-v2.1-full-8MB.bin，校验值见同目录 SHA256SUMS.txt。
+当前源码及本地固件：2.1.1（2026-11-03），包含热点播放缓冲、下载/解码分离、断线恢复及闲置 TLS 内存释放，保留自动熄屏、自动日夜和居中时钟。完整镜像位于 release/FoloMusic-v2.1.1/FoloMusic-v2.1.1-full-8MB.bin，校验值见同目录 SHA256SUMS.txt。
 
-[2.1 说明](docs/releases/v2.1.md)。以下远端链接保留为此前已发布的 2.0（标签：v2.0-folo-music）：
+当前包与历史中转包的区别见[交付目录索引](release/README.zh_CN.md)。生成的 2.1.1 二进制不提交到源码仓库，新克隆后按下文构建生成。
+
+[2.1.1 说明](docs/releases/v2.1.1.zh_CN.md)。本次为本地交付；以下远端链接保留为此前已发布的 2.0（标签：v2.0-folo-music）：
 
 [正式版本页面](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/tag/v2.0-folo-music) · [完整 8 MB 固件](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/download/v2.0-folo-music/FoloMusic-v2.0-full-8MB.bin)。
 
@@ -37,7 +39,7 @@
 - 支持简体中文、英文大小写、数字和常用标点，内置 6,774 个汉字。
 - 当前最多显示 20 个歌单；无随机播放切换、离线音频或双槽 OTA；不支持隐藏 SSID 和企业认证。
 - 歌曲版权/会员权限、网络与非官方接口变化可能影响可播放性。不承诺所有歌曲可播或长期零卡顿。
-- 当前应用 3,883,184 字节，7 MiB 应用分区剩 3,456,848 字节（约 3.30 MiB）；Flash 余量与运行 RAM 不同。
+- 当前应用大小及 7 MiB 分区余量见 [2.1.1 产物清单](release/FoloMusic-v2.1.1/manifest.json)；Flash 余量与运行 RAM 不同。
 
 ## 项目目录
 
@@ -47,7 +49,7 @@
     docs/prototypes/            HTML 设计与预览
     docs/releases/              正式版本说明
     docs/archive/               历史开发状态和旧部署说明
-    release/FoloMusic-v2.1/      本机生成的固件产物（不提交二进制）
+    release/FoloMusic-v2.1.1/    本机生成的固件产物（不提交二进制）
     server/                     旧中转服务源码，保留兼容
     netease-official-firmware/   官方平台历史实验，不是当前方案
 
@@ -59,13 +61,13 @@
 
     cd firmware/ai-passport
     idf.py -B build-direct -D SDKCONFIG=build-direct/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.direct.defaults" build
-    idf.py -B build-direct merge-bin -o build-direct/FoloToy-Wangyiyun-full.bin
+    idf.py -B build-direct merge-bin -o FoloToy-Wangyiyun-full.bin
     python tools/verify_firmware.py build-direct
-    python tools/package_release.py build-direct ../../release/FoloMusic-v2.1
+    python tools/package_release.py build-direct ../../release/FoloMusic-v2.1.1
 
-默认 Kconfig 保留旧中转兼容选项；2.1 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
+默认 Kconfig 保留旧中转兼容选项；2.1.1 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
 
-[文档索引](docs/README.md) · [2.1 说明](docs/releases/v2.1.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
+[文档索引](docs/README.md) · [2.1.1 说明](docs/releases/v2.1.1.zh_CN.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
 
 ## 开源方案与致谢
 

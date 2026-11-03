@@ -1,8 +1,10 @@
 #include "audio_stream.h"
+#include "audio_stream_policy.h"
 
 #include <string.h>
 
 #ifdef ESP_PLATFORM
+#include "audio_download.h"
 #include "bsp_audio.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
@@ -67,11 +69,10 @@ static bool wait_if_paused(void)
         vTaskDelay(pdMS_TO_TICKS(50));
     }
     if (s_stop_requested) return false;
-    s_state = AUDIO_STREAM_PLAYING;
     return true;
 }
 
-static esp_err_t decode_and_play(esp_http_client_handle_t http,
+static esp_err_t decode_and_play(audio_download_t *download,
                                  uint8_t *input,
                                  int16_t *pcm,
                                  HMP3Decoder decoder)
@@ -84,6 +85,8 @@ static esp_err_t decode_and_play(esp_http_client_handle_t http,
     int decode_errors = 0;
     bool eof = false;
     bool decoder_needs_data = false;
+    bool prebuffer = true;
+    unsigned underruns = 0;
     int64_t report_us = esp_timer_get_time();
     int64_t max_read_us = 0, max_decode_us = 0, max_write_us = 0;
     unsigned frames = 0, network_reads = 0, network_bytes = 0;
@@ -91,24 +94,46 @@ static esp_err_t decode_and_play(esp_http_client_handle_t http,
     for (;;) {
         if (!wait_if_paused()) return ESP_OK;
 
+        if (prebuffer) {
+            s_state = AUDIO_STREAM_BUFFERING;
+            if (!audio_stream_buffer_ready(audio_download_available(download),
+                                           audio_download_finished(download))) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            prebuffer = false;
+        }
+
         if (!eof && audio_stream_needs_refill(bytes_left, decoder_needs_data)) {
             compact_buffer(input, &bytes_left, &read_ptr);
             int space = AUDIO_STREAM_INPUT_BYTES - bytes_left;
             if (space <= 0) return ESP_ERR_INVALID_RESPONSE;
             int64_t start = esp_timer_get_time();
-            int read = esp_http_client_read(http, (char *)input + bytes_left, space);
+            int read = (int)audio_download_read(download, input + bytes_left, (size_t)space);
+            /* Acquire completion before the final receive: the producer may
+             * have queued its last chunk after the first empty receive. */
+            bool finished = audio_download_finished(download);
+            if (read == 0 && finished)
+                read = (int)audio_download_read(download, input + bytes_left, (size_t)space);
             int64_t cost = esp_timer_get_time() - start;
             if (cost > max_read_us) max_read_us = cost;
             network_reads++;
             if (read > 0) network_bytes += (unsigned)read;
-            if (read < 0) {
-                ESP_LOGE(TAG, "http read failed");
-                return ESP_FAIL;
+            if (read == 0 && finished) {
+                esp_err_t result = audio_download_result(download);
+                if (result != ESP_OK) return result;
+                if (bytes_left == 0) return ESP_OK;
+                eof = true;
+            } else if (read == 0 && (bytes_left == 0 || decoder_needs_data)) {
+                /* Do not alternate tiny fragments with silence: rebuild a
+                 * useful reserve while the independent producer keeps reading. */
+                prebuffer = true;
+                ++underruns;
+                ESP_LOGW(TAG, "Rebuffer audio: underruns=%u local=%d", underruns, bytes_left);
+                continue;
             }
-            if (read == 0 && bytes_left == 0) return ESP_OK;
-            if (read == 0) eof = true;
             bytes_left += read;
-            decoder_needs_data = false;
+            if (read > 0) decoder_needs_data = false;
         }
 
         if (id3_remaining > 0) {
@@ -203,6 +228,7 @@ static esp_err_t decode_and_play(esp_http_client_handle_t http,
         }
 
         int64_t write_start = esp_timer_get_time();
+        s_state = AUDIO_STREAM_PLAYING;
         if (bsp_audio_write(pcm, (size_t)mono_samples * sizeof(int16_t)) != ESP_OK) {
             ESP_LOGE(TAG, "audio write failed: samples=%d", mono_samples);
             return ESP_FAIL;
@@ -213,8 +239,9 @@ static esp_err_t decode_and_play(esp_http_client_handle_t http,
         if (write_us > max_write_us) max_write_us = write_us;
         frames++;
         if (now - report_us >= 5000000) {
-            ESP_LOGI(TAG, "timing frames=%u reads=%u bytes=%u buffered=%d max_read_us=%lld max_decode_us=%lld max_write_us=%lld free=%u",
-                     frames, network_reads, network_bytes, bytes_left, (long long)max_read_us,
+            ESP_LOGI(TAG, "timing frames=%u pulls=%u bytes=%u buffered=%d queued=%u underruns=%u max_pull_us=%lld max_decode_us=%lld max_write_us=%lld free=%u",
+                     frames, network_reads, network_bytes, bytes_left,
+                     (unsigned)audio_download_available(download), underruns, (long long)max_read_us,
                      (long long)max_decode_us, (long long)max_write_us,
                      (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
             report_us=now;frames=network_reads=network_bytes=0;max_read_us=max_decode_us=max_write_us=0;
@@ -229,7 +256,7 @@ static void audio_stream_task(void *arg)
     uint8_t *input = NULL;
     int16_t *pcm = NULL;
     HMP3Decoder decoder = NULL;
-    esp_http_client_handle_t http = NULL;
+    audio_download_t *download = NULL;
 
     input = heap_caps_malloc(AUDIO_STREAM_INPUT_BYTES, MALLOC_CAP_8BIT);
     pcm = heap_caps_malloc(AUDIO_STREAM_PCM_SAMPLES * sizeof(int16_t), MALLOC_CAP_8BIT);
@@ -239,49 +266,18 @@ static void audio_stream_task(void *arg)
         goto done;
     }
 
-    esp_http_client_config_t config = {
-        .url = s_url,
-        .timeout_ms = 10000,
-        /* Compressed input is retained separately; HTTP RX need not duplicate it. */
-        .buffer_size = 1024,
-        .buffer_size_tx = 1024,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-    };
-    http = esp_http_client_init(&config);
-    if (http == NULL) {
-        result = ESP_ERR_NO_MEM;
+    result = audio_download_start(s_url, &download);
+    if (result != ESP_OK) goto done;
+    /* Finish the initial TLS handshake before allocating codec/DMA buffers. */
+    while (!s_stop_requested &&
+           !audio_stream_buffer_ready(audio_download_available(download), audio_download_finished(download)))
+        vTaskDelay(pdMS_TO_TICKS(10));
+    if (s_stop_requested) goto done;
+    if (audio_download_finished(download) && audio_download_available(download) == 0) {
+        result = audio_download_result(download);
+        if (result == ESP_OK) result = ESP_ERR_INVALID_RESPONSE;
         goto done;
     }
-
-    ESP_LOGI(TAG, "opening audio stream: url_len=%u", (unsigned)strlen(s_url));
-    int64_t content_length = -1;
-    int status = 0;
-    for (unsigned redirects = 0; redirects <= 3; ++redirects) {
-        result = esp_http_client_open(http, 0);
-        if (result != ESP_OK) goto done;
-        content_length = esp_http_client_fetch_headers(http);
-        status = esp_http_client_get_status_code(http);
-        if (status != 301 && status != 302 && status != 303 && status != 307 && status != 308) break;
-        if (redirects == 3) { result = ESP_ERR_INVALID_RESPONSE; goto done; }
-        result = esp_http_client_set_redirection(http);
-        if (result != ESP_OK) goto done;
-        char redirected[AUDIO_STREAM_URL_LEN];
-        result = esp_http_client_get_url(http, redirected, sizeof(redirected));
-        if (result != ESP_OK) goto done;
-        if (strncmp(s_url, "https://", 8) == 0 && strncmp(redirected, "https://", 8) != 0) {
-            result = ESP_ERR_INVALID_RESPONSE;
-            goto done;
-        }
-        esp_http_client_close(http);
-    }
-    ESP_LOGI(TAG, "audio http headers: status=%d content_length=%lld",
-             status,
-             (long long)content_length);
-    if (!audio_stream_accepts_http_headers(status, content_length)) {
-        result = ESP_FAIL;
-        goto done;
-    }
-
     ESP_LOGI(TAG, "before audio init: free=%u largest=%u minimum=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
@@ -291,19 +287,17 @@ static void audio_stream_task(void *arg)
     ESP_LOGI(TAG, "after audio init: free=%u largest=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    s_state = AUDIO_STREAM_PLAYING;
-    result = decode_and_play(http, input, pcm, decoder);
+    s_state = AUDIO_STREAM_BUFFERING;
+    result = decode_and_play(download, input, pcm, decoder);
 
 done:
+    audio_download_stop(download);
+    if (s_stop_requested) result = ESP_OK;
     if (result != ESP_OK) {
         ESP_LOGE(TAG, "audio stream failed: %s", esp_err_to_name(result));
         s_state = AUDIO_STREAM_ERROR;
     } else {
         s_state = AUDIO_STREAM_STOPPED;
-    }
-    if (http) {
-        esp_http_client_close(http);
-        esp_http_client_cleanup(http);
     }
     if (decoder) MP3FreeDecoder(decoder);
     free(input);
@@ -327,7 +321,7 @@ esp_err_t audio_stream_start(const char *url)
     s_stop_requested = false;
     s_pause_requested = false;
     s_elapsed_ms = 0;
-    s_state = AUDIO_STREAM_PLAYING;
+    s_state = AUDIO_STREAM_BUFFERING;
     BaseType_t ok = xTaskCreate(audio_stream_task, "audio_stream", AUDIO_STREAM_TASK_STACK,
                                 NULL, AUDIO_STREAM_TASK_PRIORITY, &s_task);
     if (ok != pdPASS) {
@@ -340,7 +334,8 @@ esp_err_t audio_stream_start(const char *url)
 
 esp_err_t audio_stream_pause(void)
 {
-    if (s_state != AUDIO_STREAM_PLAYING || s_task == NULL) return ESP_ERR_INVALID_STATE;
+    if ((s_state != AUDIO_STREAM_PLAYING && s_state != AUDIO_STREAM_BUFFERING) || s_task == NULL)
+        return ESP_ERR_INVALID_STATE;
     s_pause_requested = true;
     s_state = AUDIO_STREAM_PAUSED;
     return ESP_OK;
@@ -350,7 +345,7 @@ esp_err_t audio_stream_resume(void)
 {
     if (s_state != AUDIO_STREAM_PAUSED || s_task == NULL) return ESP_ERR_INVALID_STATE;
     s_pause_requested = false;
-    s_state = AUDIO_STREAM_PLAYING;
+    s_state = AUDIO_STREAM_BUFFERING;
     return ESP_OK;
 }
 
@@ -411,8 +406,7 @@ void audio_stream_stop(void)
 
 bool audio_stream_accepts_http_headers(int status_code, int64_t content_length)
 {
-    (void)content_length;
-    return status_code >= 200 && status_code < 300;
+    return (status_code == 200 || status_code == 206) && content_length != 0;
 }
 
 bool audio_stream_needs_refill(int buffered_bytes, bool decoder_needs_data)
@@ -435,7 +429,11 @@ audio_stream_state_t audio_stream_state(void)
 
 bool audio_stream_is_active(void)
 {
-    return s_state == AUDIO_STREAM_PLAYING || s_state == AUDIO_STREAM_PAUSED;
+#ifdef ESP_PLATFORM
+    return s_task != NULL;
+#else
+    return s_state == AUDIO_STREAM_PLAYING || s_state == AUDIO_STREAM_PAUSED || s_state == AUDIO_STREAM_BUFFERING;
+#endif
 }
 
 uint32_t audio_stream_elapsed_ms(void)

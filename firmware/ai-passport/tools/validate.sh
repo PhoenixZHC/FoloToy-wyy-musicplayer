@@ -55,8 +55,9 @@ run_static_checks() {
 	        tests/test_wifi_provisioning_portal.c main/wifi_provisioning_portal.c \
 	        -o "${test_dir}/test_wifi_provisioning_portal"
 	    "${cc_bin}" -std=c11 -Wall -Wextra -Werror \
-	        -I../components/audio_stream/include \
-	        tests/test_audio_stream.c ../components/audio_stream/audio_stream.c \
+        -I../components/audio_stream/include -I../components/audio_stream \
+        tests/test_audio_stream.c ../components/audio_stream/audio_stream.c \
+        ../components/audio_stream/audio_stream_policy.c \
         -o "${test_dir}/test_audio_stream"
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror \
         -DNETEASE_CLIENT_PARSER_ONLY \
@@ -80,12 +81,13 @@ run_static_checks() {
     "${test_dir}/test_wifi_provisioning_portal_direct"
     "${test_dir}/test_display_policy"
     DIRECT_TEST_OUT="${test_dir}/test_netease_direct" bash tools/run_direct_host_tests.sh
+    AUDIO_DOWNLOAD_TEST_OUT="${test_dir}/test_audio_download" bash tools/run_audio_download_tests.sh
     if [[ "${KEEP_VALIDATION_ARTIFACTS:-0}" != 1 ]]; then
         rm -rf "${test_dir}"
     else
         echo "Host artifacts: ${test_dir}"
     fi
-    echo "Host tests: PASS (13 executables)"
+    echo "Host tests: PASS (14 executables)"
 }
 
 run_firmware_checks() (

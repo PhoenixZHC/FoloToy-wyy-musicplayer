@@ -123,6 +123,8 @@ esp_err_t netease_direct_cookie_merge(char *cookie, size_t capacity, const char 
 #if defined(ESP_PLATFORM)
 /* Single-worker API: not reentrant. Business calls use the loaded local session. */
 esp_err_t netease_direct_client_init(const netease_direct_client_config_t *config);
+/* Single worker only, between requests. Frees idle TLS without clearing login/cache. */
+void netease_direct_client_release_connection(void);
 esp_err_t netease_direct_session_load(netease_direct_session_t *out);
 esp_err_t netease_direct_session_save(const char *cookie, int64_t user_id, const char *nickname);
 esp_err_t netease_direct_session_clear(void);

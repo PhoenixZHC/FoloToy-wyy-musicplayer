@@ -24,6 +24,7 @@ typedef enum {
     AUDIO_STREAM_PLAYING,
     AUDIO_STREAM_PAUSED,
     AUDIO_STREAM_ERROR,
+    AUDIO_STREAM_BUFFERING,
 } audio_stream_state_t;
 
 esp_err_t audio_stream_start(const char *url);

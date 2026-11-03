@@ -88,6 +88,10 @@ static esp_event_handler_instance_t s_ip_handler;
 static bool s_wifi_ready;
 static bool s_wifi_started;
 static volatile bool s_sta_got_ip;
+static volatile bool s_wifi_reconnect_pending;
+/* Retry timing is owned by the worker; event callbacks only publish flags. */
+static unsigned s_wifi_reconnect_attempt;
+static int64_t s_wifi_reconnect_due_us;
 static volatile netease_work_t s_work;
 static volatile esp_err_t s_error;
 static volatile bool s_exit_requested;
@@ -287,9 +291,11 @@ static bool load_saved_config(netease_saved_config_t *config)
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
-    (void)data;
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         s_sta_got_ip = false;
+        s_wifi_reconnect_pending = true;
+        const wifi_event_sta_disconnected_t *event = data;
+        ESP_LOGW(TAG, "Playback Wi-Fi disconnected: reason=%u", event ? (unsigned)event->reason : 0);
     }
 }
 
@@ -300,16 +306,44 @@ static void ip_event_handler(void *arg, esp_event_base_t base, int32_t id, void 
     (void)data;
     if (id == IP_EVENT_STA_GOT_IP) {
         s_sta_got_ip = true;
+        s_wifi_reconnect_pending = false;
+        ESP_LOGI(TAG, "Playback Wi-Fi received IP");
     }
+}
+
+static void maintain_wifi(void)
+{
+    if (!s_wifi_started || s_exit_requested) return;
+    if (s_sta_got_ip) {
+        s_wifi_reconnect_attempt = 0;
+        s_wifi_reconnect_due_us = 0;
+        return;
+    }
+    if (!s_wifi_reconnect_pending || s_wifi_reconnect_attempt >= 6 ||
+        esp_timer_get_time() < s_wifi_reconnect_due_us) return;
+    unsigned shift = s_wifi_reconnect_attempt < 4 ? s_wifi_reconnect_attempt : 4;
+    unsigned delay_ms = 500U << shift;
+    ++s_wifi_reconnect_attempt;
+    s_wifi_reconnect_due_us = esp_timer_get_time() + (int64_t)delay_ms * 1000;
+    /* Avoid repeated connect calls while the driver is already connecting. */
+    s_wifi_reconnect_pending = false;
+    esp_err_t err = esp_wifi_connect();
+    ESP_LOGI(TAG, "Playback Wi-Fi reconnect: attempt=%u result=%s next_ms=%u",
+             s_wifi_reconnect_attempt, esp_err_to_name(err), delay_ms);
+    if (err != ESP_OK) s_wifi_reconnect_pending = true;
+    if (s_wifi_reconnect_attempt == 6)
+        ESP_LOGW(TAG, "Wi-Fi retry budget used; final attempt may still connect, manual retry remains available");
 }
 
 static esp_err_t start_wifi(void)
 {
     if (s_wifi_started) {
         if(s_sta_got_ip)return ESP_OK;
-        esp_err_t reconnect=esp_wifi_connect();
-        if(reconnect!=ESP_OK && reconnect!=ESP_ERR_WIFI_CONN)return reconnect;
+        s_wifi_reconnect_attempt = 0;
+        s_wifi_reconnect_due_us = 0;
+        s_wifi_reconnect_pending = true;
         for(int i=0;i<200 && !s_exit_requested;i++) {
+            maintain_wifi();
             if(s_sta_got_ip)return ESP_OK;
             vTaskDelay(pdMS_TO_TICKS(100));
         }
@@ -347,6 +381,9 @@ static esp_err_t start_wifi(void)
     sta_config.sta.pmf_cfg.required = false;
     err = esp_wifi_set_mode(WIFI_MODE_STA);
     if (err != ESP_OK) return err;
+    /* Provisioning deinitializes Wi-Fi; configure the playback driver too. */
+    err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err != ESP_OK) return err;
     err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
     if (err != ESP_OK) return err;
     err = esp_wifi_start();
@@ -354,9 +391,12 @@ static esp_err_t start_wifi(void)
     s_wifi_started = true;
 
     s_sta_got_ip = false;
-    err = esp_wifi_connect();
-    if (err != ESP_OK) return err;
+    s_wifi_reconnect_attempt = 0;
+    s_wifi_reconnect_due_us = 0;
+    s_wifi_reconnect_pending = true;
     for (int i = 0; i < 200; i++) {
+        if (s_exit_requested) return ESP_ERR_INVALID_STATE;
+        maintain_wifi();
         if (s_sta_got_ip) return ESP_OK;
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -383,6 +423,7 @@ static esp_err_t sync_time_if_possible(void)
 
 static void stop_wifi(void)
 {
+    s_wifi_reconnect_pending = false;
     if (s_wifi_started) {
         esp_wifi_disconnect();
         esp_wifi_stop();
@@ -404,6 +445,8 @@ static void stop_wifi(void)
         esp_netif_destroy_default_wifi(s_sta_netif);
         s_sta_netif = NULL;
     }
+    s_sta_got_ip = false;
+    s_wifi_reconnect_pending = false;
 }
 
 static esp_err_t ensure_client_ready(void)
@@ -651,6 +694,9 @@ static bool track_page_cached(int64_t playlist,uint32_t offset)
 }
 static void maybe_prefetch_tracks(void)
 {
+    /* Explicit browsing remains available; speculative TLS must not compete
+     * with the bounded audio download reserve on a hotspot. */
+    if (audio_stream_is_active()) return;
     if(s_exit_requested || s_worker_busy || s_work!=NETEASE_WORK_NONE || !s_sta_got_ip ||
        s_logic.state!=NETEASE_APP_TRACKS || esp_timer_get_time()<s_prefetch_retry_us)return;
     uint32_t target;
@@ -743,6 +789,10 @@ static esp_err_t load_track_url(void)
     bsp_lvgl_unlock();
 #endif
     if (err == ESP_OK && !s_exit_requested) {
+#ifdef CONFIG_NETEASE_DIRECT
+        /* The idle lyrics/API TLS connection competes with CDN RX and DMA. */
+        netease_direct_client_release_connection();
+#endif
         err = audio_stream_start(s_track_url.url);
         if (err == ESP_OK) {
             if(!bsp_lvgl_lock(0))return ESP_ERR_TIMEOUT;
@@ -770,10 +820,11 @@ static void worker_task(void *arg)
 {
     (void)arg;
     for (;;) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(250));
         if (s_exit_requested) {
             break;
         }
+        maintain_wifi();
         if(!bsp_lvgl_lock(0))continue;
         netease_work_t work=s_work;s_work=NETEASE_WORK_NONE;
         if(work==NETEASE_WORK_NONE) { bsp_lvgl_unlock();continue; }
@@ -820,6 +871,10 @@ static void worker_task(void *arg)
             err=display_settings_save();
         }
 
+#ifdef CONFIG_NETEASE_DIRECT
+        /* Explicit browsing may reopen API TLS while audio remains active. */
+        if (audio_stream_is_active()) netease_direct_client_release_connection();
+#endif
         if (err != ESP_OK) {
 #ifdef CONFIG_NETEASE_DIRECT
             if (err == NETEASE_DIRECT_ERR_AUTH && !s_exit_requested) {
@@ -1002,7 +1057,7 @@ static void draw_player(lv_obj_t *screen, bool playing)
     music_lyrics_line(s_lyric_text,(uint32_t)elapsed,s_current_lyric,sizeof(s_current_lyric));
     device_music_ui_set_media(s_cover_image.data?&s_cover_image:NULL,s_current_lyric[0]?s_current_lyric:s_lyric_status);
     device_music_ui_set_playback_context(s_playing_number,s_playing_heading,audio_stream_volume());
-    device_music_ui_set_buffering(s_audio_started && playing && elapsed==0);
+    device_music_ui_set_buffering(s_audio_started && playing && audio_stream_state()==AUDIO_STREAM_BUFFERING);
     device_music_ui_draw_player(screen,s_now_playing.name,s_now_playing.artist,
         device_music_ui_progress_percent(elapsed,s_now_playing.duration_ms),elapsed,s_now_playing.duration_ms,!playing,&s_player_widgets);
 }
@@ -1035,7 +1090,7 @@ static bool needs_rerender(device_music_screen_t screen)
            s_rendered_screen != screen ||
            s_rendered_selected != netease_app_logic_selected(&s_logic) ||
            s_rendered_playing != netease_app_logic_is_playing(&s_logic) ||
-           s_rendered_buffering != (s_audio_started && s_logic.playing && audio_stream_elapsed_ms()==0) ||
+           s_rendered_buffering != (s_audio_started && s_logic.playing && audio_stream_state()==AUDIO_STREAM_BUFFERING) ||
            (s_rendered_volume_overlay != volume_overlay) ||
            strcmp(s_rendered_message, s_message) != 0 ||
            strcmp(s_rendered_qr_payload, s_qr_payload) != 0;
@@ -1196,7 +1251,7 @@ static void render_netease_ui(void)
     s_rendered_screen = screen_id;
     s_rendered_selected = netease_app_logic_selected(&s_logic);
     s_rendered_playing = netease_app_logic_is_playing(&s_logic);
-    s_rendered_buffering=s_audio_started && s_logic.playing && audio_stream_elapsed_ms()==0;
+    s_rendered_buffering=s_audio_started && s_logic.playing && audio_stream_state()==AUDIO_STREAM_BUFFERING;
     s_rendered_volume_overlay = netease_app_logic_volume_overlay(&s_logic);
     s_rendered_volume_percent = audio_stream_volume();
     s_rendered_elapsed_seconds = audio_stream_elapsed_ms() / 1000U;
@@ -1224,6 +1279,9 @@ static void tick(lv_timer_t *timer)
         wifi_ap_record_t ap={0};
         bool valid=esp_wifi_sta_get_ap_info(&ap)==ESP_OK;
         s_signal_level=device_music_ui_signal_level(true,valid,ap.rssi);
+        if (valid && s_audio_started)
+            ESP_LOGI(TAG, "Playback Wi-Fi: rssi=%d channel=%u audio_state=%d",
+                     ap.rssi, ap.primary, (int)audio_stream_state());
         s_signal_checked_us=now;
     }
     if(s_audio_started && !s_worker_busy && s_work==NETEASE_WORK_NONE) {
