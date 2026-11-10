@@ -76,8 +76,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--version", default="2.1.1", help="Expected firmware version (default: 2.1.1)")
     args = parser.parse_args()
-    manifest = package(args.build.resolve(), args.output.resolve())
+    manifest = package(args.build.resolve(), args.output.resolve(), version=args.version)
     print(json.dumps(manifest, indent=2))
 
 if __name__ == "__main__":

@@ -20,6 +20,13 @@
 #define HTTP_TX_BUFFER_SIZE 4096
 static netease_direct_session_t session;
 static int timeout_ms = 15000;
+static bool (*session_guard_acquire)(void *);
+static void (*session_guard_release)(void *);
+static void *session_guard_context;
+void netease_direct_set_session_guard(bool (*acquire)(void *),void (*release)(void *),void *ctx)
+{
+    session_guard_acquire=acquire;session_guard_release=release;session_guard_context=ctx;
+}
 /* Single worker owns one same-origin WEAPI connection; never shared with EAPI. */
 static esp_http_client_handle_t reusable_http;
 static void release_http(void)
@@ -33,8 +40,15 @@ void netease_direct_client_release_connection(void)
 }
 /* Single-worker bounded ID cache. Cleared whenever the account changes. */
 #define PLAYLIST_ID_CACHE_CAP 512
-static struct { int64_t playlist, user; uint32_t total, start, count; int64_t *ids; time_t loaded_at; } id_cache;
+static struct { int64_t playlist, user; uint32_t total, start, count; uint64_t revision; int64_t *ids; time_t loaded_at; } id_cache;
 static void clear_id_cache(void) { free(id_cache.ids); memset(&id_cache,0,sizeof(id_cache)); }
+
+void netease_direct_invalidate_tracks(void) { clear_id_cache(); }
+int64_t netease_direct_account_id(void) { return session.user_id; }
+void netease_direct_session_unload(void)
+{
+    release_http();clear_id_cache();memset(&session,0,sizeof(session));
+}
 
 
 /* Public request metadata follows the pinned api-enhanced EAPI transport. */
@@ -271,11 +285,17 @@ esp_err_t netease_direct_session_save(const char *cookie, int64_t user_id, const
     esp_err_t err = netease_direct_cookie_copy(cookie, next->cookie, sizeof(next->cookie));
     next->user_id = user_id; strcpy(next->nickname, nickname);
     nvs_handle_t h;
+    bool guarded=false;
+    if(err==ESP_OK && session_guard_acquire) {
+        guarded=session_guard_acquire(session_guard_context);
+        if(!guarded)err=ESP_ERR_INVALID_STATE;
+    }
     if (err == ESP_OK) {
         err = nvs_open(SESSION_NS, NVS_READWRITE, &h);
         if (err == ESP_OK) { err = nvs_set_blob(h, "v1", next, sizeof(*next)); if (err == ESP_OK) err = nvs_commit(h); nvs_close(h); }
     }
     if (err == ESP_OK) { if(session.user_id!=next->user_id)clear_id_cache();memcpy(&session, next, sizeof(session)); }
+    if(guarded && session_guard_release)session_guard_release(session_guard_context);
     memset(next, 0, sizeof(*next)); free(next); return err;
 }
 
@@ -355,13 +375,14 @@ esp_err_t netease_direct_get_tracks(const char *cookie, int64_t id, uint32_t lim
     char json[1024]; snprintf(json, sizeof(json), "{\"id\":%" PRId64 ",\"n\":0,\"s\":0}", id);
     direct_stream_t *s = calloc(1,sizeof(*s)); if (!s) return ESP_ERR_NO_MEM;
     esp_err_t err=ESP_OK;
-    uint32_t total=0;size_t count=0;
+    uint32_t total=0;size_t count=0;uint64_t revision=0;
     if(id_cache.ids && id_cache.playlist==id && id_cache.user==session.user_id &&
        offset>=id_cache.start && (offset>=id_cache.total ||
        (offset-id_cache.start<id_cache.count && (limit<=id_cache.count-(offset-id_cache.start) ||
         id_cache.start+id_cache.count==id_cache.total))) &&
        time(NULL)-id_cache.loaded_at<300) {
         total=id_cache.total;
+        revision=id_cache.revision;
         count=offset<total?total-offset:0;
         if(count>limit)count=limit;
         if(count)memcpy(s->ids,id_cache.ids+offset-id_cache.start,count*sizeof(int64_t));
@@ -372,12 +393,13 @@ esp_err_t netease_direct_get_tracks(const char *cookie, int64_t id, uint32_t lim
         uint32_t window_start=offset>128?offset-128:0;
         s->all_ids=ids;s->all_ids_capacity=ids?PLAYLIST_ID_CACHE_CAP:0;s->all_ids_offset=window_start;
         err=request("/weapi/v6/playlist/detail",json,false,NULL,s);
-        total=s->total;count=s->id_count;
+        total=s->total;count=s->id_count;revision=s->revision;
         if(err==ESP_OK && ids) {
             uint32_t retained=total>window_start?total-window_start:0;
             if(retained>PLAYLIST_ID_CACHE_CAP)retained=PLAYLIST_ID_CACHE_CAP;
             if(retained) { int64_t *compact=realloc(ids,retained*sizeof(*ids));if(compact)ids=compact; }
             id_cache.ids=ids;id_cache.playlist=id;id_cache.user=session.user_id;id_cache.total=total;
+            id_cache.revision=revision;
             id_cache.start=window_start;id_cache.count=retained;id_cache.loaded_at=time(NULL);
         } else {
             /* Keep no partial cache: offsets beyond the retained range would otherwise look valid. */
@@ -403,6 +425,7 @@ esp_err_t netease_direct_get_tracks(const char *cookie, int64_t id, uint32_t lim
     }
     free(s);
     if (err != ESP_OK) { memset(out, 0, sizeof(*out)); return err; }
+    out->total_count=total;out->revision=revision;out->metadata_valid=true;
     out->playlist_id = id; out->has_next_offset = offset + count < total; out->next_offset = offset + (uint32_t)count; return ESP_OK;
 }
 

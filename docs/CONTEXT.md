@@ -1,13 +1,19 @@
 # 当前状态
 
-- 当前版本：Folo Music 2.1.1（2026-11-03），ESP32-C3 / 8 MiB / 无 PSRAM，EAPI/WEAPI 设备直连。
-- 本次修复：播放 Wi-Fi 关闭省电；下载/解码独立任务；16 KiB 队列和 8 KiB 预缓冲；缓冲提示；有上限的 Wi-Fi 重连及 HTTP 完整性/Range 校验恢复；音频活动时停推测性预取，播放前及主动浏览结束后释放闲置 API TLS。
-- 产物：release/FoloMusic-v2.1.1/，完整包 8,388,608 字节，应用 3,905,680 字节。完整 SHA-256 f1f9e6d002f5e0b045a58e7d770472417de51d5888c511aa8539ca9e03a252d6。新克隆需按部署指南生成产物，生成的当前固件不进入 Git。
-- 目录：release/README.zh_CN.md 区分当前包、实测对照包和历史中转交付；本地备份、工具和原始日志由忽略规则隔离，历史文件保留。
-- 构建/打包：ESP-IDF 5.5.4 直连构建、合并分段、内嵌版本、严格 8 MiB 打包/回读/空白 NVS 和哈希校验通过；4 项打包回归通过。版本重建仅改变应用描述和尾部校验。
-- 提交前验证：固定 actionlint 1.7.12 已下载并通过官方固定哈希校验；完整静态门禁通过，包含 14 个主机程序、4 项打包回归、仓库及 workflow 检查。直连固件构建和严格 8 MiB 包验证沿用同一源码状态的有效结果。
-- 设备：同修复代码在 2.1 版本号下已实测首曲约 3 分 32 秒正常结束并自动切歌，第二首约 110 秒；61 条 timing 累计断粮均为 0，未见播放/崩溃错误。第一首音频初始化后堆由 4,340 增至 31,492 字节。2.1.1 包未重刷。
-- 待验收：用户暂不便断热点，人为掉线/续传、主动浏览并发、长期户外弱网、功耗及听感未验收。显示交互边界见历史 2.1 说明。
-- 完整包从 0x0 写入会清空 Wi-Fi、账号及显示设置；分区匹配时可 app-only 0x10000 保留设置。镜像不含设备凭证；不归档原始 NVS 或未脱敏日志。
-- 文档：docs/releases/v2.1.1.zh_CN.md 与 firmware/ai-passport/docs/development/hotspot-playback.zh_CN.md。历史 2.1 交付及故障对照保留。
-- 仓库：用户已授权提交并推送此次源码、测试和文档至现有 main；不创建新分支、标签或 GitHub Release。提交及推送成功以最终 Git/远端核验为准。
+更新时间：2026-11-10T18:34:41+08:00（Asia/Shanghai）；来源设备：Ubuntu 开发电脑。
+
+- 当前版本 Folo Music **2.2.0**，ESP32-C3 / 8 MiB / 无 PSRAM，网易云与 QQ 音乐设备直连；含顺序/随机、模式持久化、独立平台会话、统一设置与退出。保留 MIT，协议独立实现。
+- 本地产物 `release/FoloMusic-v2.2.0/`：完整 BIN 8,388,608 字节，应用 3,950,784 字节，7 MiB 应用分区剩 3,389,248 字节。完整 SHA-256 `2c27c232d353a73b8c2cf519affdc8c1be88d871e381907067d196328304de96`；应用 SHA-256 `d2fed8aba1bd586a236e56a596dca31d8c2c04303bef52bc7e42c7aeb36710b1`。
+- ESP-IDF 5.5.4 直连构建、合并镜像、内嵌版本、严格 8 MiB 打包/分段/空白 NVS/PHY/哈希与回读校验通过。静态门禁：21 个 C 主机程序、14 项 Python 测试（9 项登录工具、5 项打包）及仓库/workflow 检查通过。新增打包 CLI --version 回归先复现失败，再修正通过。
+- 实机原版 2.2.0-dev，先做 8 MiB 私有备份，分区表与构建一致；仅写 app 0x10000 并独立 verify_flash 校验通过。写入后、启动前 0x0–0xffff 与备份逐字节一致，保留 bootloader、分区表、Wi-Fi、账号和显示 NVS/PHY。启动日志确认为 2.2.0，ELF 前缀 6d3a2c743。
+- 首次 45 秒启动观察原 Wi-Fi 未找到（reason=201），最终超时；用户打开原热点后重启复测，约 2.6 秒取得 IP、完成校时，约 3.1 秒进入平台选择（connected=1），未见崩溃。当前烧录/启动/联网及平台入口通过，未重跑登录与完整播放。设备版本已更新；以本条新证据覆盖旧记录“设备仍为 2.0/2.1/开发版”的当前状态判断。
+- 两项审阅问题仍未修：缓冲态暂停仅改 UI、异步播放成功前提前提交队列。QQ 封面/歌词未实现；长期播放/TLS、完整随机轮次/上一首、网易云与平台切换/退出、非空 QQ 收藏、弱网仍待验收。此前独立预检整曲/暂停继续/重启恢复及开发版随机跨页切歌均为历史证据，不算本次重测。
+- 仓库整理与推送进行中，仅现有 main，不创建分支、标签或 GitHub Release。二进制、私有设备备份、原始日志和本机工具由忽略规则隔离；源码、测试及当前文档纳入提交。远端推送结果以最终核验为准。
+- 知识库同步进行中：将本轮交付与验证写入 Ubuntu 本机项目档案，再核对 Windows 主库接收状态；未核验前不宣称已同步。
+
+## 入口与历史
+
+- [2.2.0 中英说明](releases/v2.2.0.zh_CN.md)、[部署与构建](deployment.md)、[审阅问题](code-review-2026-11-10.md)。
+- [交付前开发状态快照](archive/state-before-v2.2.0-delivery-2026-11-10.md)、[QQ 实机预检](qqmusic-device-validation.md)、[播放模式方案](playback-mode-plan.md)、[QQ 直连方案](qqmusic-direct-plan.md)。
+- 完整镜像写 0x0 会清空两平台账号及 Wi-Fi/播放/显示偏好；仅匹配 7 MiB factory 布局时可用 app 保留设置升级。公开镜像只取构建产物，不读取设备 NVS。
+- Ubuntu 本机 SDK `/home/phoenix/.espressif/esp-idf-v5.5.4`，IDF_TOOLS_PATH=`/home/phoenix/.espressif`，Python 环境 `idf5.5_py3.12_env`；构建 `firmware/ai-passport/build-hotspot`。本机 CMake/Ninja/Zig 在忽略目录 `.local-backup/hotspot-tools`，需要相应 PATH/PYTHONPATH。设备私有证据在 `.local-backup/delivery-2.2.0/`，禁止提交或复制到知识库。

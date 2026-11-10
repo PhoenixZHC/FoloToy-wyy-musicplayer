@@ -4,6 +4,19 @@
 
 # Changelog
 
+## 2.2.0 — 2026-11-10
+
+- Set the product version to 2.2.0 at the user's request. Hardware acceptance remains pending; the version change does not publish a release.
+- Package the clean exact-8-MiB image with an explicit --version 2.2.0 CLI check and regression coverage. App-only programming, read-back verification, settings preservation and boot-version checks passed. After the user enabled the original hotspot, networking, time synchronization and platform selection also passed. Two review defects and full playback acceptance remain open; see the [2.2.0 notes](../../../docs/releases/v2.2.0.md).
+
+- Add persistent sequential/shuffle mode selection, a bounded playlist-wide queue, transactional track selection and content-revision invalidation. Hardware acceptance is pending.
+- Add independently implemented QQ Music login, bounded JSON projection, playlist/MP3 requests and separate NVS sessions. Device preflight passed full MP3 playback, pause/resume and restart restoration. Development firmware now asks for a platform after networking and shares settings, logout and platform/account/playlist queue isolation; full product acceptance remains pending.
+- Correct shared loading, library and account text for both platforms, and log service rejection codes without credentials to diagnose unavailable QQ tracks.
+- Release optional browsing caches before playback, allocate track-page workspaces only during requests, and retain compact QQ playlist identifiers to reserve RAM for audio TLS. Allow QQ's real favorites identifier zero.
+- Account for memory already occupied by active audio when budgeting a mode change, retain an explicit reserve and queue limit, and stop the old stream before fetching a target page during track changes.
+- Place Playback mode first in the long-OK navigation menu and select it by default.
+- Show audio-stream loading during sequential, shuffle and cross-page track changes instead of the saved-login verification message.
+
 ## 2.1.1 — 2026-11-03 (local build)
 
 - Disable Wi-Fi modem sleep during playback and check configuration errors.

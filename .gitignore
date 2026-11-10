@@ -28,6 +28,7 @@ server/.env.*
 /release/FoloMusic-v*/
 **/build/
 /firmware/ai-passport/build-hotspot/
+/firmware/ai-passport/build-qq-preflight/
 **/managed_components/
 **/sdkconfig
 **/sdkconfig.old

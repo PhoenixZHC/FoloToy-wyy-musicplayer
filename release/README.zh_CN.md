@@ -4,11 +4,11 @@
 
 # 固件交付目录
 
-## 当前本地交付：Folo Music 2.1.1
+## 当前本地交付：Folo Music 2.2.0
 
-完整镜像为 FoloMusic-v2.1.1/FoloMusic-v2.1.1-full-8MB.bin，严格 8,388,608 字节。SHA-256：f1f9e6d002f5e0b045a58e7d770472417de51d5888c511aa8539ca9e03a252d6。
+完整镜像为 FoloMusic-v2.2.0/FoloMusic-v2.2.0-full-8MB.bin，严格 8,388,608 字节。SHA-256：2c27c232d353a73b8c2cf519affdc8c1be88d871e381907067d196328304de96。
 
-同目录包含 app 升级包、manifest.json 和 SHA256SUMS.txt。生成的 FoloMusic-v*/ 目录不进入 Git；新克隆的仓库需按[部署指南](../docs/deployment.md)构建，变更及验收边界见[2.1.1 说明](../docs/releases/v2.1.1.zh_CN.md)。本次源码推送不等于创建 GitHub Release。
+同目录包含 app 升级包、manifest.json 和 SHA256SUMS.txt。生成的 FoloMusic-v*/ 目录不进入 Git；新克隆的仓库需按[部署指南](../docs/deployment.md)构建，打包时加 --version 2.2.0；变更、已知问题及验收边界见[2.2.0 说明](../docs/releases/v2.2.0.zh_CN.md)。本次源码推送不等于创建 GitHub Release。
 
 完整镜像从 0x0 烧录，会清空 Wi-Fi、登录和显示设置；仅在匹配 7 MiB factory 分区时，只写 app 0x10000 才保留设置。公开镜像 NVS/PHY 为空白，不含已配置设备的凭据。
 
@@ -16,6 +16,7 @@
 
 | 目录或文件前缀 | 用途 |
 | --- | --- |
+| FoloMusic-v2.1.1/ | 前次热点修复交付，保留当时验证记录 |
 | FoloMusic-v2.1-hotspot/ | 首轮热点测试包，实机播放失败，保留作故障对照 |
 | FoloMusic-v2.1-hotspot-devicefix/ | 已实测的补修包，版本号仍为 2.1；当前交付已由 2.1.1 替代 |
 | FoloToy-Wangyiyun-Complete-v1.2.2* | 历史中转完整包和固件 |

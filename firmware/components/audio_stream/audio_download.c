@@ -25,7 +25,7 @@ struct audio_download {
     atomic_bool cancel;
     atomic_bool done;
     esp_err_t result;
-    char url[512];
+    char url[1024];
     char range[96];
     char etag[128];
     char modified[64];
@@ -230,7 +230,7 @@ retry:
 
 esp_err_t audio_download_start(const char *url, audio_download_t **out)
 {
-    if (!url || !out || strlen(url) >= 512) return ESP_ERR_INVALID_ARG;
+    if (!url || !out || strlen(url) >= sizeof(((audio_download_t *)0)->url)) return ESP_ERR_INVALID_ARG;
     *out = NULL;
     audio_download_t *d = calloc(1, sizeof(*d));
     if (!d) return ESP_ERR_NO_MEM;

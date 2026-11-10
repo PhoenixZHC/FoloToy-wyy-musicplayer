@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -76,6 +78,18 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(FileExistsError): release.package(self.build, self.output)
         self.assertEqual(full.read_bytes(), before)
         self.assertEqual(sums.read_text(), "existing-different-manifest\n")
+
+    def test_cli_packages_requested_version_and_rejects_mismatch(self):
+        self.description["project_version"] = "2.2.0"
+        (self.build / "project_description.json").write_text(json.dumps(self.description))
+        command = [sys.executable, str(Path(release.__file__)), str(self.build), str(self.output)]
+        rejected = subprocess.run(command + ["--version", "2.1.1"], capture_output=True, text=True)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertFalse(self.output.exists())
+        accepted = subprocess.run(command + ["--version", "2.2.0"], capture_output=True, text=True)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertEqual(json.loads(accepted.stdout)["version"], "2.2.0")
+        self.assertEqual((self.output / "FoloMusic-v2.2.0-full-8MB.bin").stat().st_size, 8388608)
 
 if __name__ == "__main__":
     unittest.main()

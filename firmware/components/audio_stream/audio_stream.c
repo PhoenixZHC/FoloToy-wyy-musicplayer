@@ -17,7 +17,7 @@
 
 #include <stdlib.h>
 
-#define AUDIO_STREAM_URL_LEN 512
+#define AUDIO_STREAM_URL_LEN 1024
 /* Keep enough compressed audio for a frame while leaving TLS headroom for
  * playlist/metadata requests made while playback remains active. */
 #define AUDIO_STREAM_INPUT_BYTES (8 * 1024)

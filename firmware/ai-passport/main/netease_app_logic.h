@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* 音频已占用的内存不重复预留；仍保留运行余量并限制队列峰值。 */
+size_t netease_app_playback_budget(size_t free_bytes,size_t largest,bool audio_active);
+
 typedef enum {
     NETEASE_APP_LOGIN_QR = 0,
     NETEASE_APP_LOGIN_WAITING,
@@ -23,6 +26,8 @@ typedef enum {
     NETEASE_APP_ABOUT,
     NETEASE_APP_ENDED,
     NETEASE_APP_SCREEN_TIMEOUT,
+    NETEASE_APP_PLAYBACK_MODE,
+    NETEASE_APP_PLATFORM,
 } netease_app_state_t;
 
 typedef enum {
@@ -50,6 +55,9 @@ typedef enum {
     NETEASE_APP_ACTION_BRIGHTNESS_DOWN,
     NETEASE_APP_ACTION_RETRY,
     NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT,
+    NETEASE_APP_ACTION_SET_PLAYBACK_MODE,
+    NETEASE_APP_ACTION_SWITCH_PLATFORM,
+    NETEASE_APP_ACTION_SELECT_PLATFORM,
 } netease_app_action_t;
 
 typedef struct {
@@ -60,6 +68,7 @@ typedef struct {
     bool volume_overlay;
     bool has_player;
     size_t timeout_option;
+    size_t playback_mode;
     size_t playlist_cursor, playlist_count;
     size_t track_cursor, track_count, playing_index, playing_count;
     netease_app_state_t return_state, error_return_state;

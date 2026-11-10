@@ -70,8 +70,9 @@ int main(int argc,char **argv)
     const char *const notices[]={"welcome","restore","library","signedin","expired","session","offline","unavailable","loadfail","playfail"};
     int notice=-1;for(size_t i=0;i<sizeof(notices)/sizeof(notices[0]);i++)if(strcmp(argv[1],notices[i])==0)notice=(int)i;
     if(notice>=0)device_music_ui_draw_notice(screen,(device_music_ui_notice_t)notice,notice==DEVICE_MUSIC_NOTICE_SIGNED_IN?"预览听众":NULL);
-    else if(strcmp(argv[1],"player")==0 || strcmp(argv[1],"paused")==0 || strcmp(argv[1],"buffering")==0 || strcmp(argv[1],"longtitle")==0 || strcmp(argv[1],"longartist")==0 || strcmp(argv[1],"artwork")==0 || strcmp(argv[1],"lyrics")==0 || strcmp(argv[1],"longlyrics")==0 || strcmp(argv[1],"expandedfont")==0) {
+    else if(strcmp(argv[1],"player")==0 || strcmp(argv[1],"shuffle")==0 || strcmp(argv[1],"paused")==0 || strcmp(argv[1],"buffering")==0 || strcmp(argv[1],"longtitle")==0 || strcmp(argv[1],"longartist")==0 || strcmp(argv[1],"artwork")==0 || strcmp(argv[1],"lyrics")==0 || strcmp(argv[1],"longlyrics")==0 || strcmp(argv[1],"expandedfont")==0) {
         device_music_ui_set_playback_context(1,"夜行电台",55);
+        device_music_ui_set_playback_mode(!strcmp(argv[1],"shuffle"));
         device_music_ui_set_buffering(strcmp(argv[1],"buffering")==0);
         const char *song=!strcmp(argv[1],"longtitle")?"雨后的街角与那些没有说完的话":"城市灯光";
         const char *artist=!strcmp(argv[1],"longartist")?"演示歌手 / 演示乐队 / 夜行专辑 / 城市灯光 / 沿海公路":"演示歌手 / 夜行专辑";
@@ -114,6 +115,11 @@ int main(int argc,char **argv)
             device_music_ui_update_lyric(&widgets,lyric);
         }
         if(strcmp(argv[1],"buffering")==0)device_music_ui_set_footer(screen,"—","等待","—");
+    } else if(!strcmp(argv[1],"mode") || !strcmp(argv[1],"modefail")) {
+        const char *const items[]={"顺序播放","随机播放 · 当前","返回导航"};
+        device_music_ui_draw_preferences(screen,DEVICE_MUSIC_PREF_PLAYBACK_MODE,
+            !strcmp(argv[1],"modefail")?"模式未更改：ESP_ERR_NO_MEM":"播放模式已保存","preview",items,3,1);
+        assert(find_label(screen,"随机播放 · 当前"));
     } else if(strcmp(argv[1],"list")==0 || strcmp(argv[1],"expandedlist")==0) {
         device_music_ui_row_t rows[]={
             {.title="晚风经过",.sub="演示歌手 / 风的方向",.selected=true,.number=1},
@@ -127,8 +133,8 @@ int main(int argc,char **argv)
         }
         device_music_ui_draw_list(screen,DEVICE_MUSIC_SCREEN_TRACKS,"夜行电台","1 / 15",rows,4);
     } else if(strcmp(argv[1],"menu")==0) {
-        const char *const items[]={"返回播放","当前歌曲列表","我的歌单","音量","设置"};
-        device_music_ui_draw_menu(screen,"翻到哪一页？",NULL,items,5,2);
+        const char *const items[]={"播放模式","返回播放","当前歌曲列表","我的歌单","音量","设置"};
+        device_music_ui_draw_menu(screen,"翻到哪一页？",NULL,items,6,0);
     } else if(strcmp(argv[1],"volume")==0) { device_music_ui_volume_widgets_t w;device_music_ui_draw_volume_overlay(screen,55,&w); }
     else if(strcmp(argv[1],"scanned")==0) { device_music_ui_draw_confirm(screen,NULL,NULL,NULL);device_music_ui_set_footer(screen,"—","等待确认","—"); }
     else if(strcmp(argv[1],"settings")==0 || strcmp(argv[1],"network")==0 || strcmp(argv[1],"logout")==0) {

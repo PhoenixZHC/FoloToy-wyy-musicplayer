@@ -12,6 +12,7 @@ void direct_stream_init(direct_stream_t *s, direct_stream_mode_t mode,
                         netease_direct_playlist_list_t *playlists, uint32_t offset, uint32_t limit)
 {
     memset(s, 0, sizeof(*s)); s->mode = mode; s->playlists = playlists; s->offset = offset; s->limit = limit;
+    s->revision = UINT64_C(14695981039346656037);
     if (playlists) memset(playlists, 0, sizeof(*playlists));
 }
 
@@ -156,6 +157,13 @@ static esp_err_t close_container(direct_stream_t *s, char kind)
         else s->playlists->items[s->playlists->count++] = s->item;
     } else if (f->role == ID_ITEM) {
         if (!(f->fields & 1)) return ESP_ERR_INVALID_RESPONSE;
+        /* FNV-1a over fixed-width little-endian IDs: independent of chunking,
+         * page/window position and JSON formatting, sensitive to ID order. */
+        uint64_t id = (uint64_t)s->item.id;
+        for (unsigned byte = 0; byte < 8; ++byte) {
+            s->revision ^= (id >> (byte * 8)) & UINT64_C(255);
+            s->revision *= UINT64_C(1099511628211);
+        }
         if (s->total >= s->offset && s->id_count < s->limit && s->id_count < NETEASE_DIRECT_MAX_TRACKS) s->ids[s->id_count++] = s->item.id;
         if (s->all_ids && s->total >= s->all_ids_offset && s->total - s->all_ids_offset < s->all_ids_capacity)
             s->all_ids[s->total - s->all_ids_offset] = s->item.id;

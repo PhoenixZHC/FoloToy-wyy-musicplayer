@@ -17,6 +17,7 @@ typedef struct {
     unsigned unicode_left;
     esp_err_t error;
     uint32_t offset, limit, total;
+    uint64_t revision;
     size_t id_count;
     int64_t ids[NETEASE_DIRECT_MAX_TRACKS];
     int64_t *all_ids;

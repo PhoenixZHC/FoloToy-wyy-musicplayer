@@ -5,6 +5,8 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+/* QQ原始黑白图片；调用方负责图片生命周期。 */
+void device_music_ui_draw_qq_qr(lv_obj_t *screen,const lv_image_dsc_t *image);
 
 typedef struct {
     const char *title;
@@ -87,6 +89,7 @@ void device_music_ui_draw_menu(lv_obj_t *screen, const char *heading, const char
                                const char *const *items, size_t count, size_t selected);
 void device_music_ui_draw_brightness(lv_obj_t *screen, int percent);
 void device_music_ui_set_playback_context(unsigned number, const char *playlist, int volume);
+void device_music_ui_set_playback_mode(bool shuffle);
 void device_music_ui_set_network(bool connected, unsigned signal_level);
 /* 调用方须持 LVGL 锁；仅更新状态条，未校时显示 --:--。 */
 void device_music_ui_set_clock(int hour, int minute, bool valid);
@@ -99,6 +102,7 @@ typedef enum {
     DEVICE_MUSIC_PREF_ACCOUNT,DEVICE_MUSIC_PREF_LOGOUT,DEVICE_MUSIC_PREF_RESET_WIFI,
     DEVICE_MUSIC_PREF_ABOUT,DEVICE_MUSIC_PREF_END,
     DEVICE_MUSIC_PREF_SCREEN_TIMEOUT,
+    DEVICE_MUSIC_PREF_PLAYBACK_MODE,
 } device_music_ui_preference_t;
 void device_music_ui_draw_preferences(lv_obj_t *screen,device_music_ui_preference_t page,const char *detail,
                                       const char *version,const char *const *items,size_t count,size_t selected);

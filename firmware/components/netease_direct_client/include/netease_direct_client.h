@@ -79,6 +79,10 @@ typedef struct {
     size_t count;
     uint32_t next_offset;
     bool has_next_offset;
+    /* Valid only after a complete playlist ID response; revision hashes ordered IDs. */
+    uint32_t total_count;
+    uint64_t revision;
+    bool metadata_valid;
     netease_direct_track_t items[NETEASE_DIRECT_MAX_TRACKS];
 } netease_direct_track_list_t;
 
@@ -125,6 +129,14 @@ esp_err_t netease_direct_cookie_merge(char *cookie, size_t capacity, const char 
 esp_err_t netease_direct_client_init(const netease_direct_client_config_t *config);
 /* Single worker only, between requests. Frees idle TLS without clearing login/cache. */
 void netease_direct_client_release_connection(void);
+/* 仅释放本机内存会话及缓存，不清除NVS，用于切换平台。 */
+void netease_direct_session_unload(void);
+/* 单worker扫码提交门控：acquire成功后，仅在有界NVS写入期间持锁，再调用release。 */
+void netease_direct_set_session_guard(bool (*acquire)(void *),void (*release)(void *),void *ctx);
+/* Single worker only. Force a complete ID refresh on the next track request. */
+void netease_direct_invalidate_tracks(void);
+/* Current loaded account identity only; never exports session credentials. */
+int64_t netease_direct_account_id(void);
 esp_err_t netease_direct_session_load(netease_direct_session_t *out);
 esp_err_t netease_direct_session_save(const char *cookie, int64_t user_id, const char *nickname);
 esp_err_t netease_direct_session_clear(void);

@@ -4,7 +4,7 @@
 
 # 构建与验证（Build & Test）
 
-> Folo Music 2.1.1 产品发布使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为 2.1.1 构建命令。正式直连构建、严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 4 个打包回归；3 个字体测试与 106 次预览仍单独运行。
+> Folo Music 2.2.0 产品使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为产品构建命令。正式直连构建、带 --version 2.2.0 的严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 5 个打包回归及 9 个登录工具测试；字体测试与预览单独运行。
 
 使用 ESP-IDF 5.5.3。全新机器或缺少工具链时，先按
 [环境引导](environment-setup.zh_CN.md)完成安装。
@@ -53,9 +53,27 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 电脑版固件仿真运行 `node tools/run_passportsim.cjs <wasm> <merged.bin> <app.elf> /tmp/report.json baseline`。脚本记录镜像与模拟器哈希，遇到 tripwire 或尚未支持的生产场景时明确失败。当前 PassportSim 1.0.3 支持 IDF 5.5.3 Wi-Fi，但不支持 `esp_wifi_set_ps`；仅在独立临时诊断构建省略该调用后，可执行 `diagnostic-wifi` 正常连接及 `diagnostic-wifi-absent` 超时重新扫描。两者都不是发布验收。`diagnostic-wifi-wrong-password` 因模拟器未建模错误密码而返回 `E_HLE`。不得根据受限诊断结果烧录。
 
 直连主机测试需要 mbedTLS 开发头文件与 `libmbedcrypto`。非系统路径通过
-`CC`、`DIRECT_TEST_CFLAGS`、`DIRECT_TEST_LDFLAGS` 指定。静态门禁运行 14 个
-测试程序，包括显示计时与日夜边界、两种配网模式和独立 HTTP/NVS 替身。设置
+`CC`、`DIRECT_TEST_CFLAGS`、`DIRECT_TEST_LDFLAGS` 指定。静态门禁运行 21 个
+测试程序，包括 QQ 音乐 MQTT/PNG/JSON 投影与会话失败处理、平台隔离、播放顺序、并发音频下载故障恢复、显示计时与日夜边界、两种配网模式和独立 HTTP/NVS 替身。设置
 `KEEP_VALIDATION_ARTIFACTS=1` 保留临时测试与构建目录。此 fork 的直连构建按
 仓库根 README 使用 ESP-IDF 5.5.4；本上游指南的 5.5.3 基线不改变该选择。
 
 涉及物理外设的改动必须在真机运行硬件指南验收清单，并把“编译通过”与“硬件验证通过”分开记录。
+
+## QQ 音乐实机预检
+
+此入口是独立于正式产品 UI 的可选诊断。激活 ESP-IDF 5.5.4 后，在固件目录构建：
+
+```bash
+idf.py -B build-qq-preflight -D SDKCONFIG=build-qq-preflight/sdkconfig \
+  -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.direct.defaults' \
+  -DQQMUSIC_DEVICE_PREFLIGHT=ON build
+```
+
+应用版本为 `2.1.1-qq-preflight`。读取已有 `netease_wifi` 设置，原尺寸显示 QQ 音乐 App 返回的 PNG 二维码，不缩放或随主题反色；QQ 凭据仅保存在独立的 `qqmusic` NVS 命名空间，随后刷新并校验，最多检查八页歌曲以寻找有权限的整曲 MP3。记录堆、最大连续块、栈和解码时长，不记录账号标识、凭据或媒体 URL。短按 OK 暂停或继续，长按 OK 开始新的扫码会话；重启用于验证已保存会话恢复。时长匹配不能代替听感或完整实机验收。
+
+原网络三次连接失败后，预检开启临时热点 `Folo-QQ-Test`，随机密码仅显示在设备屏幕。手机连接后访问 `http://192.168.4.1`，可扫描并提交现场 2.4 GHz 网络；等待配网最多十分钟。网络信息仅写入 Wi-Fi 驱动 RAM，不改原 NVS；失败可重提，成功后关闭 HTTP 服务及 AP，再开始 QQ 验证。重启后需要重新临时配网，QQ 会话仍从独立 NVS 恢复。预检网络失败后可长按 OK 重启重试。
+
+预检另提供启动时五秒串口初始化窗口，可接收网络 JSON 并按用户明确授权保存到独立 `qq_test_wifi` 命名空间。之后自动读取，无需重复临时配网；不改 `netease_wifi`。仅通过私有输入传输，禁止在命令输出、源码或记录中保留密码。实测结果见根目录 `docs/qqmusic-device-validation.md`。
+
+烧录必须取得明确批准，并先核对设备分区，再进行仅应用分区更新。本测试不要使用完整镜像写入，不擦除 Wi-Fi、网易云凭据或显示偏好。普通构建保留正式入口，不启用此诊断。设备播放及内存验收仍是后续双平台 UI 整合的前置条件。

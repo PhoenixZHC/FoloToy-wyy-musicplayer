@@ -104,6 +104,8 @@ static unsigned s_number;
 static char s_playlist[64];
 static int s_volume;
 static bool s_buffering;
+static bool s_shuffle;
+void device_music_ui_set_playback_mode(bool shuffle) { s_shuffle=shuffle; }
 void device_music_ui_set_buffering(bool buffering) { s_buffering=buffering; }
 static bool s_connected;
 static unsigned s_signal_level;
@@ -312,7 +314,7 @@ void device_music_ui_draw_progress(lv_obj_t *s,device_music_screen_t id,const ch
     eyeline(s,id==DEVICE_MUSIC_SCREEN_REGISTERING?"SETUP / 02":"CONTENTS / 读取","");heading(s,title?title:(id==DEVICE_MUSIC_SCREEN_REGISTERING?"正在连接。":"正在翻开目录。"));
     label(s,steps<2?"01 / 02":"02 / 02",15,94,210,49,24,t->netease_red,LV_TEXT_ALIGN_LEFT);
     stamp(s,detail?detail:(id==DEVICE_MUSIC_SCREEN_REGISTERING?"连接 Wi-Fi\n接下来：校准设备时间":"正在获取歌曲信息"),156,62);
-    label(s,id==DEVICE_MUSIC_SCREEN_REGISTERING?"请保持设备通电。":"正在连接网易云，请稍候。",15,231,210,20,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
+    label(s,id==DEVICE_MUSIC_SCREEN_REGISTERING?"请保持设备通电。":"正在连接音乐服务，请稍候。",15,231,210,20,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
     folio(s,id==DEVICE_MUSIC_SCREEN_REGISTERING?"网络连接":"长按 OK · 快捷导航");
     device_music_ui_set_footer(s,"—","等待","—");
 }
@@ -345,6 +347,16 @@ lv_obj_t *device_music_ui_draw_qr(lv_obj_t *s,device_music_screen_t id,const cha
     label(s,detail?detail:"等待扫码 / OK 刷新二维码",15,265,210,17,9,t->muted_text,LV_TEXT_ALIGN_CENTER);
     return qr;
 }
+void device_music_ui_draw_qq_qr(lv_obj_t *s,const lv_image_dsc_t *image)
+{
+    const device_music_ui_theme_t *t=device_music_ui_theme();
+    eyeline(s,"SIGN IN / QQ","");
+    label(s,"扫码登录 QQ 音乐",15,54,210,30,22,t->text,LV_TEXT_ALIGN_LEFT);
+    label(s,"使用 QQ 音乐 App 扫描并确认",15,88,210,17,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
+    int x=(240-(int)image->header.w)/2;
+    box(s,x-6,104,(int)image->header.w+12,(int)image->header.h+12,0xffffff,0);
+    lv_obj_t *qr=lv_image_create(s);lv_image_set_src(qr,image);lv_obj_set_pos(qr,x,110);
+}
 void device_music_ui_draw_confirm(lv_obj_t *s,const char *title,const char *detail,lv_obj_t **out)
 {
     const device_music_ui_theme_t *t=device_music_ui_theme();if(out)*out=NULL;
@@ -362,7 +374,7 @@ void device_music_ui_draw_list(lv_obj_t *s,device_music_screen_t id,const char *
         box(s,15,54,210,33,t->background,0);
         label(s,id==DEVICE_MUSIC_SCREEN_PLAYLISTS?"还没有歌单。":"这一页，暂时空着。",15,54,210,33,22,t->text,LV_TEXT_ALIGN_LEFT);
         label(s,"00",15,94,210,58,60,t->netease_red,LV_TEXT_ALIGN_LEFT);
-        label(s,id==DEVICE_MUSIC_SCREEN_PLAYLISTS?"在手机网易云创建或收藏歌单，\n然后回到这里刷新。":"在手机给这个歌单添加歌曲，\n或返回选择其他歌单。",15,159,210,34,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
+        label(s,id==DEVICE_MUSIC_SCREEN_PLAYLISTS?"在对应音乐 App 创建或收藏歌单，\n然后回到这里刷新。":"在手机给这个歌单添加歌曲，\n或返回选择其他歌单。",15,159,210,34,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
         stamp(s,id==DEVICE_MUSIC_SCREEN_PLAYLISTS?"OK · 刷新歌单":"OK · 返回歌单",202,36);
         folio(s,"空内容，不是网络故障");return;
     }
@@ -393,7 +405,8 @@ static void draw_player_progress(lv_obj_t *s,int percent,int elapsed,int duratio
 void device_music_ui_draw_player(lv_obj_t *s,const char *song,const char *artist,int percent,int elapsed,int duration,bool paused,device_music_ui_player_widgets_t *w)
 {
     const device_music_ui_theme_t *t=device_music_ui_theme();char meta[24];
-    eyeline(s,"",s_now_paused?"已暂停":"正在播放");
+    char position[48];snprintf(position,sizeof(position),"%u · %s",s_number,s_shuffle?"随机播放":"顺序播放");
+    eyeline(s,position,s_now_paused?"已暂停":"正在播放");
     label(s,s_playlist,15,57,210,17,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
     int text_width=s_artwork?140:210;
     if(s_artwork) {
@@ -456,6 +469,7 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
     switch(page) {
     case DEVICE_MUSIC_PREF_APPEARANCE:eye="DISPLAY / 显示";title="白天与夜晚。";break;
     case DEVICE_MUSIC_PREF_SCREEN_TIMEOUT:eye="SCREEN / 熄屏";title="让屏幕歇一会。";break;
+    case DEVICE_MUSIC_PREF_PLAYBACK_MODE:eye="PLAYBACK / 播放";title="播放模式";break;
     case DEVICE_MUSIC_PREF_NETWORK:eye="NETWORK / 网络";title="连接着的世界。";break;
     case DEVICE_MUSIC_PREF_ACCOUNT:eye="ACCOUNT / 账号";title="这本，属于你。";break;
     case DEVICE_MUSIC_PREF_LOGOUT:case DEVICE_MUSIC_PREF_RESET_WIFI:eye="CONFIRM / 确认";title=page==DEVICE_MUSIC_PREF_LOGOUT?"退出这个账号？":"重新配置网络？";break;
@@ -464,16 +478,18 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
     default:break;
     }
     eyeline(s,eye,"");heading(s,title);
+    if(page==DEVICE_MUSIC_PREF_PLAYBACK_MODE && detail && detail[0])
+        label(s,detail,15,224,210,40,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
     if(page==DEVICE_MUSIC_PREF_NETWORK) { pair(s,"Wi-Fi",detail?detail:"未连接",94);pair(s,"连接状态",s_connected?"已连接":"未连接",132);y=170; }
     if(page==DEVICE_MUSIC_PREF_ACCOUNT) {
-        line(s,97,2,t->text);label(s,detail?detail:"网易云音乐账号",15,110,210,20,12,t->green,LV_TEXT_ALIGN_LEFT);
+        line(s,97,2,t->text);label(s,detail?detail:"当前音乐账号",15,110,210,20,12,t->green,LV_TEXT_ALIGN_LEFT);
         label(s,"登录状态已保存",15,135,210,16,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
         line(s,159,1,t->divider);y=172;
     }
     if(page==DEVICE_MUSIC_PREF_LOGOUT || page==DEVICE_MUSIC_PREF_RESET_WIFI) {
         bool logout=page==DEVICE_MUSIC_PREF_LOGOUT;
         label(s,logout?"退出后需重新扫码。\nWi-Fi 配置将保留。":"重启进入网络列表，\n在设备输入 Wi-Fi 密码。",15,96,210,41,12,t->text,LV_TEXT_ALIGN_LEFT);
-        label(s,logout?"仅退出账号，不清除网络。":"保留网易云登录状态。",15,149,210,18,10,t->muted_text,LV_TEXT_ALIGN_LEFT);y=175;
+        label(s,logout?"仅退出当前平台账号。":"保留各平台登录状态。",15,149,210,18,10,t->muted_text,LV_TEXT_ALIGN_LEFT);y=175;
     }
     if(page==DEVICE_MUSIC_PREF_ABOUT) {
         pair(s,"设备","FoloToy Passport",94);pair(s,"屏幕","240 × 320",132);
@@ -544,16 +560,16 @@ void device_music_ui_draw_notice(lv_obj_t *s, device_music_ui_notice_t notice, c
         heading(s,restore?"接着上次，听。":signed_in?"Folo Music，准备好了。":"正在翻开目录。");
         label(s,signed_in?"你好。":"…",15,94,210,53,43,t->netease_red,LV_TEXT_ALIGN_LEFT);
         line(s,150,2,t->text);
-        label(s,signed_in?(detail && detail[0]?detail:"网易云音乐账号"):restore?"正在验证已保存的登录状态":"读取个人歌单",15,164,210,22,12,signed_in?t->green:t->text,LV_TEXT_ALIGN_LEFT);
+        label(s,signed_in?(detail && detail[0]?detail:"当前音乐账号"):restore?"正在验证已保存的登录状态":"读取个人歌单",15,164,210,22,12,signed_in?t->green:t->text,LV_TEXT_ALIGN_LEFT);
         line(s,197,1,t->divider);
         label(s,signed_in?"登录状态已保存":restore?"有效时直接进入歌单。\n过期时会提示重新扫码。":"正在获取创建与收藏的歌单。\n可长按 OK 打开导航。",15,210,210,37,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
-        folio(s,signed_in?"下次开机自动恢复":restore?"无需重复配网":"正在读取网易云歌单");
+        folio(s,signed_in?"下次选择此平台后恢复":restore?"无需重复配网":"正在读取当前平台歌单");
         device_music_ui_set_footer(s,"—",signed_in?"进入歌单":"等待","—");return;
     }
     const char *code="LOAD",*title="歌单没有读出来。",*body=detail?detail:"网络请求失败，请稍后重试。\n长按 OK 可返回歌单。",*action="重试读取";
     switch(notice) {
     case DEVICE_MUSIC_NOTICE_WIFI_FAILED:code="Wi-Fi";title="网络还没连上。";body="检查密码、信号及 2.4 GHz 网络。\n已有登录状态会保留。";action="重试连接";break;
-    case DEVICE_MUSIC_NOTICE_EXPIRED:code="QR";title="这张码过期了。";body="重新获取二维码，\n再用网易云音乐 App 扫描。";action="获取新码";break;
+    case DEVICE_MUSIC_NOTICE_EXPIRED:code="QR";title="这张码过期了。";body="重新获取二维码，\n再用对应的音乐 App 扫描。";action="获取新码";break;
     case DEVICE_MUSIC_NOTICE_SESSION:code="LOGIN";title="需要重新登录。";body="已保存的登录状态失效。\nWi-Fi 配置仍然保留。";action="重新扫码";break;
     case DEVICE_MUSIC_NOTICE_OFFLINE:code="OFFLINE";title="网络暂时断开。";body="OK 重试当前网络。\n↓ 网络设置，可更换 Wi-Fi。";action="尝试重连";break;
     case DEVICE_MUSIC_NOTICE_UNAVAILABLE:code="TRACK";title="这首暂时不能播。";body="可能受账号权限或资源限制。\n可在手机确认，或换下一首。";action="下一首";break;

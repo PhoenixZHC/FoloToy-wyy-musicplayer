@@ -21,6 +21,7 @@ static bool playlist_fixture;
 static bool media_fixture;
 static unsigned paged_start;
 static unsigned paged_total=21;
+static unsigned paged_last_delta;
 static char paged_json[4096];
 static netease_direct_session_t stored, pending;
 static bool stored_exists;
@@ -73,7 +74,7 @@ esp_err_t esp_http_client_perform(esp_http_client_handle_t h)
         e.data="{\"code\":200,\"playlist\":{\"trackIds\":[";e.data_len=(int)strlen(e.data);
         esp_err_t err=h->config.event_handler(&e);if(err)return err;
         for(unsigned i=1;i<=paged_total;i++) {
-            char item[40];snprintf(item,sizeof(item),"%s{\"id\":%u}",i==1?"":",",i);
+            char item[40];snprintf(item,sizeof(item),"%s{\"id\":%u}",i==1?"":",",i+(i==paged_total?paged_last_delta:0));
             e.data=item;e.data_len=(int)strlen(item);err=h->config.event_handler(&e);if(err)return err;
         }
         e.data="]}}";e.data_len=3;return h->config.event_handler(&e);
@@ -115,6 +116,10 @@ esp_err_t nvs_commit(nvs_handle_t h)
 { (void)h; ++commits; if (commit_error) return commit_error; stored = pending; stored_exists = true; return ESP_OK; }
 void nvs_close(nvs_handle_t h) { (void)h; }
 
+static bool guard_allowed;
+static unsigned guard_acquired,guard_released;
+static bool commit_guard(void *ctx) { assert(ctx==&guard_allowed);guard_acquired++;return guard_allowed; }
+static void release_guard(void *ctx) { assert(ctx==&guard_allowed);guard_released++; }
 int main(void)
 {
     netease_direct_session_t loaded;
@@ -122,6 +127,14 @@ int main(void)
     assert(netease_direct_client_init(&config) == ESP_OK);
     assert(netease_direct_session_load(&loaded) == ESP_ERR_NVS_NOT_FOUND);
     assert(netease_direct_session_save("MUSIC_U=old; __csrf=x", 123, "A") == ESP_OK);
+    unsigned before_guard=commits;
+    netease_direct_set_session_guard(commit_guard,release_guard,&guard_allowed);
+    assert(netease_direct_session_save("MUSIC_U=late",456,"Old QR")==ESP_ERR_INVALID_STATE);
+    assert(commits==before_guard && guard_acquired==1 && guard_released==0);
+    guard_allowed=true;
+    assert(netease_direct_session_save("MUSIC_U=old; __csrf=x",123,"A")==ESP_OK);
+    assert(guard_acquired==2 && guard_released==1);
+    netease_direct_set_session_guard(NULL,NULL,NULL);
     assert(netease_direct_session_load(&loaded) == ESP_OK && loaded.user_id == 123);
     transport_error = ESP_ERR_TIMEOUT;
     assert(netease_direct_session_verify() == ESP_ERR_TIMEOUT);
@@ -180,11 +193,15 @@ int main(void)
     netease_direct_track_list_t tracks;unsigned before=calls;
     assert(netease_direct_get_tracks(NULL,100,1,0,&tracks)==ESP_OK && calls==before+2);
     assert(id_cache.ids && id_cache.total==3);
+    assert(tracks.metadata_valid && tracks.total_count==3);
+    uint64_t revision=tracks.revision;
     before=calls;
     assert(netease_direct_get_tracks(NULL,100,1,0,&tracks)==ESP_OK && calls==before+1);
     before=calls;
     assert(netease_direct_get_tracks(NULL,100,1,3,&tracks)==ESP_OK && !tracks.count && calls==before);
+    assert(tracks.metadata_valid && tracks.total_count==3 && tracks.revision==revision);
     assert(netease_direct_get_tracks(NULL,100,1,1,&tracks)==ESP_ERR_INVALID_RESPONSE);
+    assert(!tracks.metadata_valid && !tracks.total_count && !tracks.revision);
     id_cache.loaded_at=time(NULL)-301;before=calls;
     assert(netease_direct_get_tracks(NULL,100,1,0,&tracks)==ESP_OK && calls==before+2);
     clear_id_cache();assert(!id_cache.ids);
@@ -202,12 +219,33 @@ int main(void)
     paged_total=4097;paged_start=3501;clear_id_cache();before=calls;
     assert(netease_direct_get_tracks(NULL,200,8,3500,&tracks)==ESP_OK && tracks.items[0].id==3501);
     assert(id_cache.total==4097 && id_cache.count==512 && id_cache.start==3372);
+    assert(tracks.metadata_valid && tracks.total_count==4097);
+    revision=tracks.revision;
     paged_start=3509;before=calls;
     assert(netease_direct_get_tracks(NULL,200,8,3508,&tracks)==ESP_OK && tracks.items[0].id==3509 && calls==before+1);
     paged_start=1;before=calls;
     assert(netease_direct_get_tracks(NULL,200,8,0,&tracks)==ESP_OK && tracks.items[0].id==1 && calls==before+2);
     assert(id_cache.start==0 && id_cache.count==512);
-    paged_start=0;clear_id_cache();
+    assert(tracks.revision==revision);
+    /* Same-size change beyond both page and retained window changes revision. */
+    paged_last_delta=10000;netease_direct_invalidate_tracks();before=calls;
+    assert(netease_direct_get_tracks(NULL,200,8,0,&tracks)==ESP_OK && calls==before+2);
+    assert(tracks.total_count==4097 && tracks.revision!=revision);
+    revision=tracks.revision;id_cache.loaded_at=time(NULL)-301;before=calls;
+    paged_last_delta=20000;
+    assert(netease_direct_get_tracks(NULL,200,8,0,&tracks)==ESP_OK && calls==before+2);
+    assert(tracks.revision!=revision);
+    before=calls;
+    assert(netease_direct_get_tracks(NULL,200,8,5000,&tracks)==ESP_OK && !tracks.count && calls==before);
+    assert(tracks.metadata_valid && tracks.total_count==4097);
+    paged_total=0;netease_direct_invalidate_tracks();before=calls;
+    assert(netease_direct_get_tracks(NULL,200,8,0,&tracks)==ESP_OK && !tracks.count && calls==before+1);
+    assert(tracks.metadata_valid && !tracks.total_count);
+    paged_start=0;netease_direct_invalidate_tracks();assert(!id_cache.ids);
+    response_json="{\"code\":200,\"playlist\":{}}";
+    assert(netease_direct_get_tracks(NULL,200,8,0,&tracks)==ESP_ERR_INVALID_RESPONSE);
+    assert(!tracks.metadata_valid && !tracks.total_count && !tracks.revision);
+    assert(netease_direct_account_id()==123);
     char *huge = malloc(RESPONSE_CAP + 20); assert(huge); memset(huge, 'x', RESPONSE_CAP + 19); huge[RESPONSE_CAP + 19] = 0; response_json = huge;
     assert(netease_direct_get_track_url(NULL, 9, 128000, &url) == ESP_ERR_INVALID_SIZE); free(huge);
     assert(erases == 0 && calls > 10 && commits > 1);

@@ -50,6 +50,7 @@ esp_err_t direct_adapter_qr_poll(const char *key, netease_qr_status_t *out)
 }
 
 esp_err_t direct_adapter_logout(void) { return netease_direct_session_clear(); }
+int64_t direct_adapter_account_id(void) { return netease_direct_account_id(); }
 
 esp_err_t direct_adapter_playlists(netease_playlist_list_t *out)
 {
@@ -75,6 +76,7 @@ esp_err_t direct_adapter_tracks(int64_t id, uint32_t limit, uint32_t offset, net
         if (p->next_offset > INT32_MAX) err = ESP_ERR_INVALID_SIZE;
         else {
             out->count = p->count; out->playlist_id = p->playlist_id; out->has_next_offset = p->has_next_offset; out->next_offset = (int)p->next_offset;
+            out->total_count=p->total_count;out->revision=p->revision;out->metadata_valid=p->metadata_valid;
             for (size_t i = 0; i < p->count; ++i) { out->items[i].id = p->items[i].id; out->items[i].duration_ms = p->items[i].duration_ms; strcpy(out->items[i].name, p->items[i].name); strcpy(out->items[i].artist, p->items[i].artist); }
         }
     }

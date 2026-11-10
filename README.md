@@ -1,14 +1,14 @@
-# Folo Music 2.1.1
+# Folo Music 2.2.0
 
-把 FoloToy AI Passport 变成独立的网易云音乐播放器。设备通过开源 EAPI/WEAPI 协议直接访问网易云和音频 CDN，无需部署中转服务。支持设备选网、扫码登录、歌单浏览、音乐播放、封面与同步歌词。
+把 FoloToy AI Passport 变成独立的网易云 / QQ 音乐双平台播放器。设备通过独立实现的开源协议直接访问音乐服务和音频 CDN，无需部署中转服务。支持设备选网、平台选择、扫码登录、歌单浏览、顺序/随机播放；网易云支持封面与同步歌词。
 
 ## 下载与安装
 
-当前源码及本地固件：2.1.1（2026-11-03），包含热点播放缓冲、下载/解码分离、断线恢复及闲置 TLS 内存释放，保留自动熄屏、自动日夜和居中时钟。完整镜像位于 release/FoloMusic-v2.1.1/FoloMusic-v2.1.1-full-8MB.bin，校验值见同目录 SHA256SUMS.txt。
+当前源码及本地固件：**2.2.0（2026-11-10）**。新增 QQ 音乐、联网后平台选择、独立平台会话和顺序/随机播放，保留热点缓冲、自动熄屏、自动日夜和居中时钟。完整镜像位于 release/FoloMusic-v2.2.0/FoloMusic-v2.2.0-full-8MB.bin，严格 8,388,608 字节；校验值见同目录 SHA256SUMS.txt。
 
-当前包与历史中转包的区别见[交付目录索引](release/README.zh_CN.md)。生成的 2.1.1 二进制不提交到源码仓库，新克隆后按下文构建生成。
+当前包与历史包的区别见[交付目录索引](release/README.zh_CN.md)。生成的二进制不提交到源码仓库，新克隆后按下文构建生成；本次源码推送不创建 GitHub Release。
 
-[2.1.1 说明](docs/releases/v2.1.1.zh_CN.md)。本次为本地交付；以下远端链接保留为此前已发布的 2.0（标签：v2.0-folo-music）：
+[2.2.0 说明及已知问题](docs/releases/v2.2.0.zh_CN.md)。以下远端链接仅为历史已发布的 2.0（标签：v2.0-folo-music），不是 2.2.0 下载入口：
 
 [正式版本页面](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/tag/v2.0-folo-music) · [完整 8 MB 固件](https://github.com/PhoenixZHC/FoloToy-wyy-musicplayer/releases/download/v2.0-folo-music/FoloMusic-v2.0-full-8MB.bin)。
 
@@ -23,23 +23,24 @@
 
 1. 设备扫描 2.4 GHz Wi-Fi，↑↓选网络、OK 确认。
 2. 屏幕键盘：↑↓移动、OK 输入；长按↑↓切换字符组，长按 OK 打开连接、删除、显隐和返回菜单。连接成功后保存密码。
-3. 用网易云音乐 App 扫描设备二维码并确认授权。手机只用于扫码，不负责 Wi-Fi 配网。
+3. 联网后选择网易云或 QQ 音乐，使用对应音乐 App 扫码确认；已保存的账号先验证恢复。手机只用于扫码，不负责 Wi-Fi 配网。
 4. 歌单与歌曲列表：↑↓选择、OK 打开或播放；长按↑↓快速移动。
 5. 播放页：↑上一首、↓下一首、OK 暂停/继续；长按↑↓进入音量调节、OK 完成。
-6. 长按 OK 打开导航，快速返回播放页、歌曲列表、歌单和设置；子菜单长按 OK 返回。
-7. 设置支持日夜配色、亮度、网络与账号。断网/错误页按↓可进入网络设置重新选网。
+6. 长按 OK 打开导航，第一项为播放模式，可选顺序或随机；还可返回播放页、当前歌曲列表、歌单和设置。
+7. 设置支持日夜配色、亮度、网络、当前平台账号退出和返回平台选择。切换平台保留其他平台账号，退出账号保留 Wi-Fi。断网/错误页按↓可进入网络设置重新选网。
 
 当前源码在「设置 → 显示与日夜 → 熄屏」设置自动熄屏时间：永不、15 秒、30 秒、1/2/5 分钟，默认 1 分钟，重启后保留。无按键操作达到设定时间后关闭背光，音乐继续播放；任意功能键唤醒并恢复原亮度，唤醒这次按键不执行其他操作。日夜配色跟随系统时间，按北京时间 07:00-19:00 使用日间，其余时间使用夜间；联网校时前明确提示等待，并暂用上次配色。所有页面顶部中央持续显示北京时间 HH:mm，未校时显示 --:--；名称、时间、WiFi 和电量统一使用 10 像素字号、相同行高与文字基线，信号条底部对齐文字。这些改动已包含在 2.1 本地固件中。
 
 ## 功能与边界
 
 - 日夜两种配色，支持 Wi-Fi 信号图标、播放进度、音量调节和三键操作提示。
-- 当前歌曲封面和同步歌词；封面失败不占位，过长歌名/歌手滚动显示。
+- 网易云当前歌曲封面和同步歌词；QQ 封面/歌词尚未接入。封面失败不占位，过长歌名/歌手滚动显示。
 - 歌曲列表支持分页缓存和相邻页面预取；首次加载速度受网络和设备可用内存影响。
 - 支持简体中文、英文大小写、数字和常用标点，内置 6,774 个汉字。
-- 当前最多显示 20 个歌单；无随机播放切换、离线音频或双槽 OTA；不支持隐藏 SSID 和企业认证。
+- 歌单列表有上限；顺序/随机使用全歌单索引队列，随机每条目需 12 字节并受实时堆预算限制，超限明确失败。无离线音频或双槽 OTA；不支持隐藏 SSID 和企业认证。
 - 歌曲版权/会员权限、网络与非官方接口变化可能影响可播放性。不承诺所有歌曲可播或长期零卡顿。
-- 当前应用大小及 7 MiB 分区余量见 [2.1.1 产物清单](release/FoloMusic-v2.1.1/manifest.json)；Flash 余量与运行 RAM 不同。
+- 当前应用 3,950,784 字节，7 MiB 分区剩 3,389,248 字节；Flash 余量与运行 RAM 不同。
+- 已知问题：缓冲时暂停可能只改变界面；音频任务创建后提前提交队列，启动失败不回滚。长期播放和完整平台切换验收未完成，详见[审阅记录](docs/code-review-2026-11-10.md)。
 
 ## 项目目录
 
@@ -49,7 +50,7 @@
     docs/prototypes/            HTML 设计与预览
     docs/releases/              正式版本说明
     docs/archive/               历史开发状态和旧部署说明
-    release/FoloMusic-v2.1.1/    本机生成的固件产物（不提交二进制）
+    release/FoloMusic-v2.2.0/    本机生成的固件产物（不提交二进制）
     server/                     旧中转服务源码，保留兼容
     netease-official-firmware/   官方平台历史实验，不是当前方案
 
@@ -57,17 +58,19 @@
 
 ## 从源码构建
 
+当前源码采用正式版本号 **2.2.0**；构建验证与实机功能验收分别记录，不以正式版本号代替验收。
+
 使用 ESP-IDF 5.5.4，ESP32-C3，8 MiB Flash，无 PSRAM。生成字库已随源码提交，普通编译无需 Pillow。发布时显式使用直连配置，不复用旧中转 sdkconfig：
 
     cd firmware/ai-passport
     idf.py -B build-direct -D SDKCONFIG=build-direct/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.direct.defaults" build
     idf.py -B build-direct merge-bin -o FoloToy-Wangyiyun-full.bin
     python tools/verify_firmware.py build-direct
-    python tools/package_release.py build-direct ../../release/FoloMusic-v2.1.1
+    python tools/package_release.py build-direct ../../release/FoloMusic-v2.2.0 --version 2.2.0
 
-默认 Kconfig 保留旧中转兼容选项；2.1.1 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
+默认 Kconfig 保留旧中转兼容选项；2.2.0 始终按上述直连配置构建。验证、字体重生成和模拟器边界见[部署说明](docs/deployment.md)与[构建指南](firmware/ai-passport/docs/development/build-and-test.md)。
 
-[文档索引](docs/README.md) · [2.1.1 说明](docs/releases/v2.1.1.zh_CN.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
+[文档索引](docs/README.md) · [2.2.0 说明](docs/releases/v2.2.0.zh_CN.md) · [架构](ARCHITECTURE.md) · [完整交互原型](docs/prototypes/scheme-b-complete.html)。
 
 ## 开源方案与致谢
 

@@ -214,6 +214,11 @@ int main(void)
         assert(esp_timer_get_time() < deadline); sleep_us(100);
     }
     audio_download_stop(download); wait_tasks();
+    char long_url[1025];memset(long_url,'x',sizeof(long_url));memcpy(long_url,"https://test.invalid/",21);long_url[1024]=0;
+    assert(audio_download_start(long_url,&download)==ESP_ERR_INVALID_ARG);
+    long_url[1023]=0;
+    assert(audio_download_start(long_url,&download)==ESP_OK);
+    audio_download_stop(download);wait_tasks();
     puts("Audio downloader: PASS (10 concurrent fault scenarios)");
     return 0;
 }

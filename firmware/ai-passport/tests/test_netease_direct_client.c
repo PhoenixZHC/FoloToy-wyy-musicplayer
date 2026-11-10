@@ -90,14 +90,21 @@ static void test_cookie_and_bodies(void)
 static void test_stream(void)
 {
     const char *json = "{\"playlist\":{\"name\":\"trackIds [ ignored\",\"tracks\":[{\"id\":999}],\"trackIds\":[{\"id\":1},{\"id\":2},{\"id\":3},{\"id\":4}]},\"code\":200}";
+    uint64_t revision=0;
     for (size_t chunk = 1; chunk < 32; ++chunk) {
         direct_stream_t s; direct_stream_init(&s, DIRECT_STREAM_IDS, NULL, 1, 2);
         size_t n = strlen(json);
         for (size_t i = 0; i < n; i += chunk) assert(direct_stream_feed(&s, json + i, n - i < chunk ? n - i : chunk) == ESP_OK);
         assert(direct_stream_finish(&s) == ESP_OK);
         assert(s.total == 4 && s.id_count == 2 && s.ids[0] == 2 && s.ids[1] == 3);
+        if(chunk==1)revision=s.revision;
+        assert(s.revision==revision);
     }
     direct_stream_t s; netease_direct_playlist_list_t p;
+    const char *reordered="{\"code\":200,\"playlist\":{\"trackIds\":[{\"id\":4},{\"id\":2},{\"id\":3},{\"id\":1}]}}";
+    direct_stream_init(&s,DIRECT_STREAM_IDS,NULL,1,2);
+    assert(direct_stream_feed(&s,reordered,strlen(reordered))==ESP_OK);
+    assert(direct_stream_finish(&s)==ESP_OK && s.total==4 && s.revision!=revision);
     direct_stream_init(&s, DIRECT_STREAM_PLAYLISTS, &p, 0, 20);
     json = "{\"code\":200,\"playlist\":[{\"id\":12,\"name\":\"A \\u4e2d\",\"trackCount\":2,\"creator\":{\"id\":999,\"nickname\":\"other\"}}]}";
     assert(direct_stream_feed(&s, json, strlen(json)) == ESP_OK);

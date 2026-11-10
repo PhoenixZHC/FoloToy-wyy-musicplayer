@@ -16,6 +16,7 @@ run_static_checks() {
 
     python3 tools/check_repo.py
     python3 tests/test_package_release.py
+    python3 tests/test_qqmusic_login_probe.py
 
     actionlint_bin="${ACTIONLINT_BIN:-}"
     if [[ -z "${actionlint_bin}" ]]; then
@@ -39,6 +40,37 @@ run_static_checks() {
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_netease_app_logic.c main/netease_app_logic.c \
         -o "${test_dir}/test_netease_app_logic"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_music_playback_order.c main/music_playback_order.c \
+        -o "${test_dir}/test_music_playback_order"
+    "${test_dir}/test_music_playback_order"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -I../components/qqmusic_direct_client/include \
+        tests/test_qqmusic_mqtt.c ../components/qqmusic_direct_client/qqmusic_mqtt.c \
+        -o "${test_dir}/test_qqmusic_mqtt"
+    "${test_dir}/test_qqmusic_mqtt"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -I../components/qqmusic_direct_client/include \
+        tests/test_qqmusic_qr_png.c ../components/qqmusic_direct_client/qqmusic_qr_png.c \
+        -o "${test_dir}/test_qqmusic_qr_png"
+    "${test_dir}/test_qqmusic_qr_png"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -I../components/qqmusic_direct_client/include \
+        tests/test_qqmusic_json.c ../components/qqmusic_direct_client/qqmusic_json.c \
+        -o "${test_dir}/test_qqmusic_json"
+    "${test_dir}/test_qqmusic_json"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -DQQMUSIC_HOST_TEST -I../components/qqmusic_direct_client/include \
+        tests/test_qqmusic_parse.c ../components/qqmusic_direct_client/qqmusic_json.c \
+        ../components/qqmusic_direct_client/qqmusic_parse.c -o "${test_dir}/test_qqmusic_parse"
+    "${test_dir}/test_qqmusic_parse"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -DQQMUSIC_HOST_TEST \
+        -Itests/qqmusic_stubs -I../components/qqmusic_direct_client/include -I"${cjson_dir}" \
+        tests/test_qqmusic_session.c ../components/qqmusic_direct_client/qqmusic_client.c \
+        ../components/qqmusic_direct_client/qqmusic_json.c ../components/qqmusic_direct_client/qqmusic_parse.c \
+        "${cjson_dir}/cJSON.c" -o "${test_dir}/test_qqmusic_session"
+    "${test_dir}/test_qqmusic_session"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM -DQQMUSIC_HOST_TEST \
+        -Itests/qqmusic_stubs -Imain -I../components/netease_client/include \
+        -I../components/netease_direct_client/include -I../components/qqmusic_direct_client/include \
+        tests/test_music_provider.c main/music_provider.c -o "${test_dir}/test_music_provider"
+    "${test_dir}/test_music_provider"
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_display_policy.c main/display_policy.c \
         -o "${test_dir}/test_display_policy"
@@ -87,7 +119,7 @@ run_static_checks() {
     else
         echo "Host artifacts: ${test_dir}"
     fi
-    echo "Host tests: PASS (14 executables)"
+    echo "Host tests: PASS (21 executables)"
 }
 
 run_firmware_checks() (

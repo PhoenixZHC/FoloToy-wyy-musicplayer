@@ -30,7 +30,7 @@ extern "C" {
 #define NETEASE_CLIENT_OWNER_LEN 64
 #define NETEASE_CLIENT_ARTIST_LEN 96
 #define NETEASE_CLIENT_FORMAT_LEN 16
-#define NETEASE_CLIENT_TRACK_URL_LEN 512
+#define NETEASE_CLIENT_TRACK_URL_LEN 1024
 #define NETEASE_CLIENT_MAX_PLAYLISTS 20
 #define NETEASE_CLIENT_MAX_TRACKS 8
 #define NETEASE_CLIENT_RESPONSE_MAX_BYTES 4096
@@ -88,6 +88,10 @@ typedef struct {
     char name[NETEASE_CLIENT_NAME_LEN];
     char artist[NETEASE_CLIENT_ARTIST_LEN];
     int duration_ms;
+    /* QQ 使用真实字符串资源标识，不映射为虚构整数。网易云保留原 id。 */
+    char qq_mid[32], qq_media_mid[32], qq_album_mid[32];
+    uint32_t qq_song_type;
+    uint64_t qq_mp3_bytes;
 } netease_track_t;
 
 typedef struct {
@@ -95,6 +99,10 @@ typedef struct {
     size_t count;
     int next_offset;
     bool has_next_offset;
+    /* False when the source did not provide complete playlist metadata. */
+    uint32_t total_count;
+    uint64_t revision;
+    bool metadata_valid;
     netease_track_t items[NETEASE_CLIENT_MAX_TRACKS];
 } netease_track_list_t;
 
