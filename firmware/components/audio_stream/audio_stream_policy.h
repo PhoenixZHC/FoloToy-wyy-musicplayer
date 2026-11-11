@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define AUDIO_STREAM_NETWORK_BYTES (16U * 1024U)
+#define AUDIO_STREAM_NETWORK_BYTES (8U * 1024U)
 #define AUDIO_STREAM_PREBUFFER_BYTES (8U * 1024U)
 
 bool audio_stream_buffer_ready(size_t buffered, bool finished);

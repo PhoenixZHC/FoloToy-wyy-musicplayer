@@ -4,7 +4,7 @@
 
 # 构建与验证（Build & Test）
 
-> Folo Music 2.2.0 产品使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为产品构建命令。正式直连构建、带 --version 2.2.0 的严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 5 个打包回归及 9 个登录工具测试；字体测试与预览单独运行。
+> Folo Music 2.3.0 产品使用 ESP-IDF 5.5.4，并显式启用 sdkconfig.direct.defaults；本页 5.5.3/default 构建描述是上游基线，不作为产品构建命令。正式直连构建、带 --version 2.3.0 的严格 8 MiB 打包和设置清空/保留条件见[产品部署指南](../../../../docs/deployment.md)。静态门禁另运行 5 个打包回归及 9 个登录工具测试；字体测试与预览单独运行。
 
 使用 ESP-IDF 5.5.3。全新机器或缺少工具链时，先按
 [环境引导](environment-setup.zh_CN.md)完成安装。

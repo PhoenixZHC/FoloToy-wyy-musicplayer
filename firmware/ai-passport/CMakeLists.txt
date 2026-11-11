@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(PROJECT_VER "2.2.0")
+set(PROJECT_VER "2.3.0")
 if(QQMUSIC_DEVICE_PREFLIGHT)
     set(PROJECT_VER "2.1.1-qq-preflight")
 endif()

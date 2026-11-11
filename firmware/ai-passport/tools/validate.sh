@@ -61,7 +61,7 @@ run_static_checks() {
         ../components/qqmusic_direct_client/qqmusic_parse.c -o "${test_dir}/test_qqmusic_parse"
     "${test_dir}/test_qqmusic_parse"
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L -DQQMUSIC_HOST_TEST \
-        -Itests/qqmusic_stubs -I../components/qqmusic_direct_client/include -I"${cjson_dir}" \
+        -Itests/qqmusic_stubs -I../components/qqmusic_direct_client/include -I../components/bounded_http/include -I"${cjson_dir}" \
         tests/test_qqmusic_session.c ../components/qqmusic_direct_client/qqmusic_client.c \
         ../components/qqmusic_direct_client/qqmusic_json.c ../components/qqmusic_direct_client/qqmusic_parse.c \
         "${cjson_dir}/cJSON.c" -o "${test_dir}/test_qqmusic_session"
@@ -71,6 +71,26 @@ run_static_checks() {
         -I../components/netease_direct_client/include -I../components/qqmusic_direct_client/include \
         tests/test_music_provider.c main/music_provider.c -o "${test_dir}/test_music_provider"
     "${test_dir}/test_music_provider"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_music_artwork_policy.c main/music_artwork_policy.c \
+        -o "${test_dir}/test_music_artwork_policy"
+    "${test_dir}/test_music_artwork_policy"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror \
+        -Itests/bounded_http_stubs -I../components/bounded_http/include \
+        tests/test_bounded_http.c ../components/bounded_http/bounded_http.c \
+        -o "${test_dir}/test_bounded_http"
+    "${test_dir}/test_bounded_http"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -DQQMUSIC_HOST_TEST \
+        -Itests/artwork_stubs -Itests/qqmusic_stubs -Imain \
+        -I../components/qqmusic_direct_client/include -I../components/bounded_http/include \
+        tests/test_music_artwork.c main/music_artwork.c main/music_artwork_policy.c \
+        -o "${test_dir}/test_music_artwork"
+    "${test_dir}/test_music_artwork"
+    "${cc_bin}" -std=c11 -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L \
+        -Itests/network_diagnostics_stubs -Imain \
+        tests/test_network_diagnostics.c main/network_diagnostics.c \
+        -o "${test_dir}/test_network_diagnostics"
+    "${test_dir}/test_network_diagnostics"
     "${cc_bin}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_display_policy.c main/display_policy.c \
         -o "${test_dir}/test_display_policy"
@@ -119,7 +139,7 @@ run_static_checks() {
     else
         echo "Host artifacts: ${test_dir}"
     fi
-    echo "Host tests: PASS (21 executables)"
+    echo "Host tests: PASS (25 executables)"
 }
 
 run_firmware_checks() (

@@ -10,6 +10,7 @@ typedef int esp_err_t;
 #define ESP_ERR_INVALID_STATE 0x103
 #define ESP_ERR_INVALID_SIZE 0x104
 #define ESP_ERR_NOT_FOUND 0x105
+#define ESP_ERR_TIMEOUT 0x107
 #define ESP_ERR_INVALID_RESPONSE 0x108
 #else
 #include "esp_err.h"
@@ -23,6 +24,8 @@ typedef int esp_err_t;
 #define QQMUSIC_MAX_TRACKS 8
 #define QQMUSIC_MID_MAX 32
 #define QQMUSIC_URL_MAX 1024
+#define QQMUSIC_LYRICS_MAX_BYTES 8191
+#define QQMUSIC_LYRICS_RESPONSE_MAX 12288
 
 typedef struct {
     uint64_t id; /* 腾讯真实disstid；喜欢目录使用接口规定的0及dir_id=201。 */
@@ -64,6 +67,10 @@ esp_err_t qqmusic_parse_playlists(qqmusic_json_t data,bool favorites,qqmusic_pla
 esp_err_t qqmusic_parse_tracks(qqmusic_json_t data,uint32_t offset,qqmusic_tracks_t *out);
 esp_err_t qqmusic_parse_audio(qqmusic_json_t data,qqmusic_json_t dispatch,const qqmusic_track_t *track,qqmusic_audio_t *out);
 esp_err_t qqmusic_parse_response(const char *json,size_t length,qqmusic_json_t *data);
+/* 官方网页接口 nobase64=1：JSON字符串内为UTF-8 LRC，不接受JSONP/Base64回退。 */
+esp_err_t qqmusic_parse_lyrics(const char *json,size_t length,char *out,size_t capacity);
+esp_err_t qqmusic_cover_url(const qqmusic_track_t *track,char *out,size_t capacity);
+esp_err_t qqmusic_lyrics_url(const qqmusic_track_t *track,char *out,size_t capacity);
 
 /* 以下API仅在联网worker中调用；不初始化或释放共享Wi-Fi。 */
 void qqmusic_client_init(qqmusic_client_t *client);
@@ -76,3 +83,4 @@ esp_err_t qqmusic_client_logout(qqmusic_client_t *client);
 esp_err_t qqmusic_client_playlists(qqmusic_client_t *client,qqmusic_playlists_t *out);
 esp_err_t qqmusic_client_tracks(qqmusic_client_t *client,const qqmusic_playlist_t *playlist,uint32_t offset,qqmusic_tracks_t *out);
 esp_err_t qqmusic_client_audio(qqmusic_client_t *client,const qqmusic_track_t *track,qqmusic_audio_t *out);
+esp_err_t qqmusic_client_lyrics(qqmusic_client_t *client,const qqmusic_track_t *track,char *out,size_t capacity);

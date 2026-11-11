@@ -82,12 +82,29 @@ static void test_platform_and_direct_logout(void)
     l.state=NETEASE_APP_SETTINGS;l.selected=5;
     assert(CLICK(OK)==NETEASE_APP_ACTION_SWITCH_PLATFORM && l.playing);
 }
+static void test_network_diagnostics_menu(void)
+{
+    netease_app_logic_t l;netease_app_logic_init(&l);
+    netease_app_logic_set_tracks(&l,3);l.selected=1;netease_app_logic_set_playing(&l);
+    LONG(OK);select_navigation(&l,5);CLICK(DOWN);CLICK(OK);
+    assert(l.state==NETEASE_APP_NETWORK && l.selected==0 && l.playing);
+    assert(CLICK(OK)==NETEASE_APP_ACTION_TEST_NETWORK);
+    assert(l.state==NETEASE_APP_NETWORK_TEST && l.playing);
+    CLICK(DOWN);assert(l.selected==0);
+    assert(CLICK(OK)==NETEASE_APP_ACTION_TEST_NETWORK);
+    CLICK(UP);assert(l.selected==0);
+    LONG(OK);assert(l.state==NETEASE_APP_NETWORK && l.playing);
+    CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_WIFI_CONFIRM);
+    CLICK(OK);assert(l.state==NETEASE_APP_NETWORK);
+    CLICK(DOWN);CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_SETTINGS);
+}
 int main(void)
 {
     test_playback_memory_budget();
     test_screen_timeout_menu();
     test_playback_mode_menu();
     test_platform_and_direct_logout();
+    test_network_diagnostics_menu();
     netease_app_logic_t l;netease_app_logic_init(&l);
     assert(netease_app_logic_dispatch_button(&l,NETEASE_APP_BTN_OK,NETEASE_APP_BTN_LONG,true)==NETEASE_APP_ACTION_NONE);
     netease_app_logic_set_playlists(&l,10);LONG(DOWN);assert(l.selected==5);
@@ -135,10 +152,10 @@ int main(void)
     netease_app_logic_set_error(&l);
     assert(CLICK(OK)==NETEASE_APP_ACTION_RETRY);
     CLICK(DOWN);assert(l.state==NETEASE_APP_NETWORK);
-    CLICK(OK);assert(l.state==NETEASE_APP_WIFI_CONFIRM && l.selected==0);
+    CLICK(DOWN);CLICK(OK);assert(l.state==NETEASE_APP_WIFI_CONFIRM && l.selected==0);
     CLICK(OK);assert(l.state==NETEASE_APP_NETWORK);
     LONG(OK);LONG(OK);assert(l.state==NETEASE_APP_ERROR);
-    CLICK(DOWN);CLICK(OK);CLICK(DOWN);
+    CLICK(DOWN);CLICK(DOWN);CLICK(OK);CLICK(DOWN);
     assert(CLICK(OK)==NETEASE_APP_ACTION_RESET_CLOUD_SETUP);
     uint32_t target=0;
     assert(netease_app_prefetch_offset(0,4,0,true,4,4,&target) && target==4);

@@ -203,6 +203,9 @@ static void download_task(void *arg)
         if (count == -ESP_ERR_HTTP_EAGAIN && now - progress_us < 3000000) continue;
         ESP_LOGW(TAG, "Incomplete audio read=%d offset=%" PRIu64 " expected=%" PRId64,
                  count, d->received, d->total);
+        ESP_LOGW(TAG, "Read failure resources: free=%u largest=%u",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         result = ESP_FAIL;
 retry:
         if (http) {

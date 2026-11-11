@@ -1,6 +1,6 @@
 // components/bsp/include/bsp_battery.h
 // CellWise CW2017 电量计:I2C 0x63,与 ES8311 共用总线。
-// 芯片自带 Li-Poly profile,直接给 SOC%,无需外部分压电阻与查表。
+// 固件启动时写入默认 4.2 V Li-Poly profile；读数不代表已完成电芯标定。
 #pragma once
 
 #include "esp_err.h"

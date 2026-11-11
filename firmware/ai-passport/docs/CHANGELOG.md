@@ -4,6 +4,16 @@
 
 # Changelog
 
+## 2.3.0 — 2026-11-11
+
+- Use one 12 px font for artist names and lyrics while keeping 24 px titles. Add Japanese kana/kanji and common Korean syllables only to the 9, 12 and 24 px sets; keep other UI sizes Chinese-only. Split the 24 px bitmap automatically at the 1 MiB limit.
+- Update font coverage checks and CJK playback previews; the new build is 5,134,896 bytes with 2,205,136 bytes free in the 7 MiB application partition.
+- Place the battery percentage in its own slot to the right of the Wi-Fi bars so the status text does not overlap; show `--%` when the gauge is unavailable.
+- Fix CW2017 being detected while SOC stayed at `--%`: apply the default 4.2 V Li-Poly profile at boot and wait for ADC/SOC readiness.
+- Add Settings > Network > Connectivity test with a single page showing connected, disconnected or testing, plus a brief failure reason. Keep detailed checks in logs, hide HTTP response codes, and support retry and cancellation. Active playback or insufficient memory shows an incomplete test.
+- Add QQ album artwork and timed LRC through the shared provider, bounded image sampling, explicit media errors and a socket deadline guard for slow HTTP responses. The user accepted playback, artwork and lyric synchronization on the development build.
+- Reserve RAM for media and full TLS records by reducing the audio queue to 8 KiB and decoder input to 4 KiB, allocating the decoder after initial prebuffering. This addresses the on-device TLS allocation failure; long playback and weak networks remain to be verified.
+
 ## 2.2.0 — 2026-11-10
 
 - Set the product version to 2.2.0 at the user's request. Hardware acceptance remains pending; the version change does not publish a release.

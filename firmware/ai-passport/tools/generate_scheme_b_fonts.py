@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rasterize installed OFL Noto CJK SC fonts into flash-resident LVGL 2bpp fonts.
+"""Rasterize installed OFL Noto CJK fonts into flash-resident LVGL 2bpp fonts.
 
 Requires Pillow with FreeType. No network, converter package or server changes.
 Usage: python3 tools/generate_scheme_b_fonts.py [--full]
@@ -22,6 +22,7 @@ NUMBERS = Path("/usr/share/fonts/opentype/urw-base35/NimbusRoman-Regular.otf")
 LINE_METRICS = {8:(10,2),9:(12,3),10:(13,3),12:(16,4),13:(16,4),
                 14:(17,4),17:(21,5),18:(21,5),22:(26,6),25:(29,7)}
 MAX_BITMAP_BYTES = 1 << 20
+METADATA_FONT_SIZES = (9, 12, 24)
 
 def gb2312():
     result = set()
@@ -77,6 +78,45 @@ def expanded_characters(required):
     if missing:
         raise ValueError("Required source glyphs missing: " + ", ".join("U+%04X" % cp for cp in missing))
     return base
+
+def japanese_characters():
+    """JIS X 0208 kanji/kana/punctuation plus modern and half-width kana.
+
+    Mathematical/Greek/Cyrillic symbols from JIS are outside this text subset.
+    Shared Chinese characters are stored once in each selected font.
+    """
+    result = set()
+    for lead in range(0xA1, 0xFF):
+        for trail in range(0xA1, 0xFF):
+            try: text = bytes([lead, trail]).decode("euc_jp")
+            except UnicodeDecodeError: continue
+            result.update(ch for ch in text if han(ch) or 0x3000 <= ord(ch) <= 0x30FF)
+    for first, last in ((0x3041, 0x309F), (0x30A1, 0x30FF),
+                        (0x31F0, 0x31FF), (0xFF61, 0xFF9F)):
+        result.update(chr(cp) for cp in range(first, last + 1)
+                      if unicodedata.category(chr(cp)) != "Cn")
+    return result
+
+def korean_characters():
+    """KS X 1001's 2,350 syllables and modern compatibility jamo."""
+    result = set(map(chr, range(0x3131, 0x3164)))
+    for lead in range(0xB0, 0xC9):
+        for trail in range(0xA1, 0xFF):
+            result.update(bytes([lead, trail]).decode("euc_kr"))
+    return result
+
+def metadata_characters(base):
+    chars = base | japanese_characters() | korean_characters()
+    supported = source_codepoints(SANS, 2) & source_codepoints(SERIF, 2)
+    missing = sorted(ord(ch) for ch in chars if ord(ch) not in supported)
+    if missing:
+        raise ValueError("Required metadata glyphs missing: " +
+                         ", ".join("U+%04X" % cp for cp in missing))
+    return chars
+
+def characters_for_size(size, fixed, chinese, metadata):
+    if size in METADATA_FONT_SIZES: return metadata
+    return chinese if size in (10, 14) else fixed
 
 def write_server_charset(characters, path):
     ordered = "".join(sorted(ch for ch in characters if ord(ch) > 0x7F))
@@ -202,16 +242,17 @@ def main():
         fixed.update(ch for ch in path.read_text() if ord(ch)>127 and ord(ch)<65536)
     fixed.update("–×—−…·，。？！（）暂停返回播放音量亮度确认取消歌曲网络账号显示日夜余白章节我的歌单")
     dynamic=expanded_characters(fixed) if args.full else fixed
+    metadata=metadata_characters(dynamic) if args.full else dynamic
     # Preserve ASCII English and actual UI punctuation in fixed UI sizes too.
     fixed |= {ch for ch in dynamic if not han(ch)}
     result=[]
     for size in (8,9,10,12,13,14,17,18,22,24,43,46):
-        chars=dynamic if size in (9,10,12,14,24) else fixed
+        chars=characters_for_size(size,fixed,dynamic,metadata)
         if size==43:chars=set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.- …你好已扫码。")
         if size==46:chars=set("余白")
         result.append(generate("netease_ui_font_%d"%size,25 if size==24 else size,SERIF if size in (17,22,24,43,46) else SANS,chars))
     for size in (60,80):result.append(generate("netease_ui_font_%d"%size,size,NUMBERS,"0123456789%",0))
     (FONT_DIR/"scheme_b_font_manifest.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    write_server_charset(dynamic, ROOT.parent.parent / "server/src/generated/deviceCharset.ts")
+    write_server_charset(metadata, ROOT.parent.parent / "server/src/generated/deviceCharset.ts")
     print(json.dumps(result,ensure_ascii=False,indent=2))
 if __name__=="__main__":main()

@@ -20,7 +20,8 @@
 #define AUDIO_STREAM_URL_LEN 1024
 /* Keep enough compressed audio for a frame while leaving TLS headroom for
  * playlist/metadata requests made while playback remains active. */
-#define AUDIO_STREAM_INPUT_BYTES (8 * 1024)
+/* Two Helix MAINBUF_SIZE windows fit; reserve RAM for artwork and 16 KiB TLS records. */
+#define AUDIO_STREAM_INPUT_BYTES (4 * 1024)
 #define AUDIO_STREAM_PCM_SAMPLES 2304
 #define AUDIO_STREAM_TASK_STACK 8192
 #define AUDIO_STREAM_DEFAULT_VOLUME 35
@@ -258,14 +259,6 @@ static void audio_stream_task(void *arg)
     HMP3Decoder decoder = NULL;
     audio_download_t *download = NULL;
 
-    input = heap_caps_malloc(AUDIO_STREAM_INPUT_BYTES, MALLOC_CAP_8BIT);
-    pcm = heap_caps_malloc(AUDIO_STREAM_PCM_SAMPLES * sizeof(int16_t), MALLOC_CAP_8BIT);
-    decoder = MP3InitDecoder();
-    if (input == NULL || pcm == NULL || decoder == NULL) {
-        result = ESP_ERR_NO_MEM;
-        goto done;
-    }
-
     result = audio_download_start(s_url, &download);
     if (result != ESP_OK) goto done;
     /* Finish the initial TLS handshake before allocating codec/DMA buffers. */
@@ -276,6 +269,13 @@ static void audio_stream_task(void *arg)
     if (audio_download_finished(download) && audio_download_available(download) == 0) {
         result = audio_download_result(download);
         if (result == ESP_OK) result = ESP_ERR_INVALID_RESPONSE;
+        goto done;
+    }
+    input = heap_caps_malloc(AUDIO_STREAM_INPUT_BYTES, MALLOC_CAP_8BIT);
+    pcm = heap_caps_malloc(AUDIO_STREAM_PCM_SAMPLES * sizeof(int16_t), MALLOC_CAP_8BIT);
+    decoder = MP3InitDecoder();
+    if (input == NULL || pcm == NULL || decoder == NULL) {
+        result = ESP_ERR_NO_MEM;
         goto done;
     }
     ESP_LOGI(TAG, "before audio init: free=%u largest=%u minimum=%u",

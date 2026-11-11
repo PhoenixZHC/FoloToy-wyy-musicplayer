@@ -70,12 +70,15 @@ int main(int argc,char **argv)
     const char *const notices[]={"welcome","restore","library","signedin","expired","session","offline","unavailable","loadfail","playfail"};
     int notice=-1;for(size_t i=0;i<sizeof(notices)/sizeof(notices[0]);i++)if(strcmp(argv[1],notices[i])==0)notice=(int)i;
     if(notice>=0)device_music_ui_draw_notice(screen,(device_music_ui_notice_t)notice,notice==DEVICE_MUSIC_NOTICE_SIGNED_IN?"预览听众":NULL);
-    else if(strcmp(argv[1],"player")==0 || strcmp(argv[1],"shuffle")==0 || strcmp(argv[1],"paused")==0 || strcmp(argv[1],"buffering")==0 || strcmp(argv[1],"longtitle")==0 || strcmp(argv[1],"longartist")==0 || strcmp(argv[1],"artwork")==0 || strcmp(argv[1],"lyrics")==0 || strcmp(argv[1],"longlyrics")==0 || strcmp(argv[1],"expandedfont")==0) {
+    else if(strcmp(argv[1],"player")==0 || strcmp(argv[1],"shuffle")==0 || strcmp(argv[1],"paused")==0 || strcmp(argv[1],"buffering")==0 || strcmp(argv[1],"longtitle")==0 || strcmp(argv[1],"longartist")==0 || strcmp(argv[1],"artwork")==0 || strcmp(argv[1],"mediaerror")==0 || strcmp(argv[1],"lyrics")==0 || strcmp(argv[1],"longlyrics")==0 || strcmp(argv[1],"expandedfont")==0 || !strcmp(argv[1],"japanese") || !strcmp(argv[1],"korean")) {
         device_music_ui_set_playback_context(1,"夜行电台",55);
         device_music_ui_set_playback_mode(!strcmp(argv[1],"shuffle"));
         device_music_ui_set_buffering(strcmp(argv[1],"buffering")==0);
         const char *song=!strcmp(argv[1],"longtitle")?"雨后的街角与那些没有说完的话":"城市灯光";
         const char *artist=!strcmp(argv[1],"longartist")?"演示歌手 / 演示乐队 / 夜行专辑 / 城市灯光 / 沿海公路":"演示歌手 / 夜行专辑";
+        bool japanese=!strcmp(argv[1],"japanese"),korean=!strcmp(argv[1],"korean");
+        if(japanese) { song="夜に駆ける";artist="YOASOBI"; }
+        if(korean) { song="봄날";artist="방탄소년단"; }
         bool expanded=!strcmp(argv[1],"expandedfont");
         if(expanded) {
             song="祎喆的音乐";artist="Folo Music / The Beatles";
@@ -83,7 +86,7 @@ int main(int argc,char **argv)
         }
         static uint16_t cover_pixels[60*60];
         static lv_image_dsc_t cover;
-        bool has_cover=!strcmp(argv[1],"artwork");
+        bool has_cover=!strcmp(argv[1],"artwork") || japanese || korean;
         if(has_cover) {
             for(unsigned i=0;i<60*60;i++)cover_pixels[i]=0xa329;
             cover.header.magic=LV_IMAGE_HEADER_MAGIC;cover.header.cf=LV_COLOR_FORMAT_RGB565;
@@ -92,7 +95,10 @@ int main(int argc,char **argv)
         }
         const char *lyric=!strcmp(argv[1],"longlyrics")?"雨后的街角与那些没有说完的话，沿海公路上晚风经过":!strcmp(argv[1],"lyrics")?"让音乐慢慢进来":NULL;
         if(expanded)lyric="听音乐，看见每一个简体字\nABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if(japanese)lyric="沈むように溶けてゆくように";
+        if(korean)lyric="보고 싶다 이렇게 말하니까";
         device_music_ui_set_media(has_cover?&cover:NULL,lyric);
+        device_music_ui_set_artwork_status(!strcmp(argv[1],"mediaerror")?"封面读取失败":NULL);
         device_music_ui_player_widgets_t widgets={0};
         device_music_ui_draw_player(screen,song,artist,strcmp(argv[1],"buffering")==0?0:32,strcmp(argv[1],"buffering")==0?0:72000,222000,strcmp(argv[1],"paused")==0,&widgets);
         lv_obj_update_layout(screen);
@@ -107,7 +113,8 @@ int main(int argc,char **argv)
         assert(images==(unsigned)has_cover);
         assert(lv_obj_get_height(widgets.lyric_label)==42);
         assert(lv_obj_get_y(widgets.lyric_label)==199);
-        assert(lv_obj_get_style_text_font(widgets.lyric_label,0)->line_height==17);
+        assert(lv_obj_get_style_text_font(widgets.lyric_label,0)->line_height==16);
+        assert(lv_obj_get_style_text_font(widgets.lyric_label,0)==lv_obj_get_style_text_font(singer,0));
         assert(lv_obj_get_y(widgets.lyric_label)+lv_obj_get_height(widgets.lyric_label)<lv_obj_get_y(widgets.progress_fill));
         if(lyric) {
             device_music_ui_update_lyric(&widgets,"晚风经过，音乐慢慢进来");
@@ -115,12 +122,22 @@ int main(int argc,char **argv)
             device_music_ui_update_lyric(&widgets,lyric);
         }
         if(strcmp(argv[1],"buffering")==0)device_music_ui_set_footer(screen,"—","等待","—");
+    } else if(!strncmp(argv[1],"nettest",7)) {
+        bool paused=!strcmp(argv[1],"nettestpause"),failed=!strcmp(argv[1],"nettest2");
+        const char *status=paused?"检测未完成":failed?"网络未连通":"网络连通";
+        device_music_ui_draw_network_test(screen,"QQ 音乐",status,false,
+            paused?"请先暂停播放，再按 OK 检测":failed?"Wi-Fi 未连接":NULL);
+        lv_obj_update_layout(screen);
+        lv_obj_t *result=find_label(screen,status);assert(result);
+        assert(lv_obj_get_y(result)>=110 && lv_obj_get_y(result)+lv_obj_get_height(result)<195);
+        assert(!find_label(screen,"1 / 2") && !find_label(screen,"2 / 2"));
+        assert(find_label(screen,"网络连通测试") && find_label(screen,"OK 重试"));
     } else if(!strcmp(argv[1],"mode") || !strcmp(argv[1],"modefail")) {
         const char *const items[]={"顺序播放","随机播放 · 当前","返回导航"};
         device_music_ui_draw_preferences(screen,DEVICE_MUSIC_PREF_PLAYBACK_MODE,
             !strcmp(argv[1],"modefail")?"模式未更改：ESP_ERR_NO_MEM":"播放模式已保存","preview",items,3,1);
         assert(find_label(screen,"随机播放 · 当前"));
-    } else if(strcmp(argv[1],"list")==0 || strcmp(argv[1],"expandedlist")==0) {
+    } else if(strcmp(argv[1],"list")==0 || strcmp(argv[1],"expandedlist")==0 || !strcmp(argv[1],"multilist")) {
         device_music_ui_row_t rows[]={
             {.title="晚风经过",.sub="演示歌手 / 风的方向",.selected=true,.number=1},
             {.title="慢慢来",.sub="演示歌手 / 周末录音",.number=2},
@@ -131,6 +148,13 @@ int main(int argc,char **argv)
             rows[1].title="晞灏玥垚 · 音乐时光";rows[1].sub="abcdefghijklmnopqrstuvwxyz";
             device_music_ui_set_now_playing("祎喆 · Folo Music 0123456789",false);
         }
+        if(!strcmp(argv[1],"multilist")) {
+            rows[0].title="夜に駆ける";rows[0].sub="YOASOBI / THE BOOK";
+            rows[1].title="봄날";rows[1].sub="방탄소년단 / YOU NEVER WALK ALONE";
+            rows[2].title="First Love";rows[2].sub="宇多田ヒカル";
+            rows[3].title="좋은 날";rows[3].sub="아이유";
+            device_music_ui_set_now_playing("봄날 · 방탄소년단",false);
+        }
         device_music_ui_draw_list(screen,DEVICE_MUSIC_SCREEN_TRACKS,"夜行电台","1 / 15",rows,4);
     } else if(strcmp(argv[1],"menu")==0) {
         const char *const items[]={"播放模式","返回播放","当前歌曲列表","我的歌单","音量","设置"};
@@ -139,10 +163,15 @@ int main(int argc,char **argv)
     else if(strcmp(argv[1],"scanned")==0) { device_music_ui_draw_confirm(screen,NULL,NULL,NULL);device_music_ui_set_footer(screen,"—","等待确认","—"); }
     else if(strcmp(argv[1],"settings")==0 || strcmp(argv[1],"network")==0 || strcmp(argv[1],"logout")==0) {
         const char *const settings[]={"显示与日夜","网络","账号","设备信息"};
-        const char *const network[]={"重新配网","返回设置"};
+        const char *const network[]={"网络连通测试","重新配网","返回设置"};
         const char *const logout[]={"取消，保留登录","确认退出账号"};
         bool net=strcmp(argv[1],"network")==0,confirm=strcmp(argv[1],"logout")==0;
-        device_music_ui_draw_preferences(screen,net?DEVICE_MUSIC_PREF_NETWORK:confirm?DEVICE_MUSIC_PREF_LOGOUT:DEVICE_MUSIC_PREF_SETTINGS,"Home Wi-Fi","preview",net?network:confirm?logout:settings,net||confirm?2:4,0);
+        device_music_ui_draw_preferences(screen,net?DEVICE_MUSIC_PREF_NETWORK:confirm?DEVICE_MUSIC_PREF_LOGOUT:DEVICE_MUSIC_PREF_SETTINGS,"Home Wi-Fi","preview",net?network:confirm?logout:settings,net?3:confirm?2:4,0);
+        if(net) {
+            lv_obj_update_layout(screen);
+            lv_obj_t *back=find_label(screen,"返回设置");assert(back);
+            assert(lv_obj_get_y(back)+lv_obj_get_height(back)<263);
+        }
         if(!net && !confirm) {
             assert(find_label(screen,"显示与日夜"));
             assert(!find_label(screen,"熄屏"));
@@ -217,6 +246,8 @@ int main(int argc,char **argv)
         }
     }
     lv_obj_t *wifi=find_label(screen,"WiFi");
+    lv_obj_t *battery=find_label(screen,"82%");
+    assert(battery && lv_obj_get_x(battery) >= 191);
     if(wifi) {
         const lv_font_t *font=lv_obj_get_style_text_font(wifi,0);
         int bottom=lv_obj_get_y(wifi)+font->line_height-font->base_line;

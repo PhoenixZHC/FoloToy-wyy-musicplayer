@@ -4,7 +4,7 @@
 
 # Build and Test
 
-> Folo Music 2.2.0 uses ESP-IDF 5.5.4 and explicitly selects sdkconfig.direct.defaults. The 5.5.3/default build below is the upstream baseline, not the product release command. See the [product deployment guide](../../../../docs/deployment.md) for direct builds, packaging with --version 2.2.0, exact-8-MiB images and settings-preservation rules. Static validation also runs five packaging regressions and nine login-tool tests; font tests and previews run separately.
+> Folo Music 2.3.0 uses ESP-IDF 5.5.4 and explicitly selects sdkconfig.direct.defaults. The 5.5.3/default build below is the upstream baseline, not the product release command. See the [product deployment guide](../../../../docs/deployment.md) for direct builds, packaging with --version 2.3.0, exact-8-MiB images and settings-preservation rules. Static validation also runs five packaging regressions and nine login-tool tests; font tests and previews run separately.
 
 Use ESP-IDF 5.5.3. On a clean machine or when the toolchain is missing, follow
 the [environment bootstrap](environment-setup.md) first.

@@ -131,6 +131,8 @@ static char s_now_song[128];
 static bool s_now_paused;
 static const lv_image_dsc_t *s_artwork;
 static const char *s_lyric;
+static const char *s_artwork_status;
+void device_music_ui_set_artwork_status(const char *status) { s_artwork_status=status; }
 void device_music_ui_set_media(const lv_image_dsc_t *image,const char *lyric)
 { s_artwork=image;s_lyric=lyric; }
 void device_music_ui_update_lyric(const device_music_ui_player_widgets_t *w,const char *lyric)
@@ -162,12 +164,10 @@ static void draw_header(lv_obj_t *s,const device_music_ui_screen_spec_t *spec)
         label(s,"FOLO MUSIC",14,text_y,80,text_height,text_size,t->text,LV_TEXT_ALIGN_LEFT);
     s_clock_label=label(s,s_clock_text,98,text_y,44,text_height,text_size,t->text,LV_TEXT_ALIGN_CENTER);
     if(s_clock_label)lv_obj_add_event_cb(s_clock_label,clock_label_deleted,LV_EVENT_DELETE,NULL);
-    int soc=bsp_battery_soc();char status[40];
-    if(s_connected && soc>=0)snprintf(status,sizeof(status),"%d%%",soc);
-    else if(s_connected)snprintf(status,sizeof(status)," ");
-    else if(soc>=0)snprintf(status,sizeof(status),"离线 · %d%%",soc);
-    else snprintf(status,sizeof(status),"离线");
-    label(s,status,146,text_y,80,text_height,text_size,t->muted_text,LV_TEXT_ALIGN_RIGHT);
+    int soc=bsp_battery_soc();char status[12];
+    snprintf(status,sizeof(status),soc>=0?"%d%%":"--%%",soc);
+    /* Keep the percentage beside the signal bars instead of underlapping Wi-Fi. */
+    label(s,status,191,text_y,35,text_height,text_size,t->muted_text,LV_TEXT_ALIGN_RIGHT);
     if(s_connected) {
         /* 信号条底部对齐 WiFi 字体基线，避免受字号行高留白影响。 */
         int x=177,bottom=text_y+font_px(text_size)->line_height-font_px(text_size)->base_line;
@@ -417,8 +417,10 @@ void device_music_ui_draw_player(lv_obj_t *s,const char *song,const char *artist
     scroll_if_needed(song_label,song?song:"歌曲信息不可用",text_width,24);
     lv_obj_t *artist_label=label(s,artist?artist:"",15,135,text_width,18,12,t->muted_text,LV_TEXT_ALIGN_LEFT);
     scroll_if_needed(artist_label,artist?artist:"",text_width,12);
+    if(!s_artwork && s_artwork_status)
+        label(s,s_artwork_status,15,165,210,14,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
     line(s,188,1,t->divider);
-    lv_obj_t *lyric_label=label(s,s_buffering && !paused?"正在缓冲…":s_lyric,15,199,210,42,14,t->text,LV_TEXT_ALIGN_CENTER);
+    lv_obj_t *lyric_label=label(s,s_buffering && !paused?"正在缓冲…":s_lyric,15,199,210,42,12,t->text,LV_TEXT_ALIGN_CENTER);
     if(w)w->lyric_label=lyric_label;
     draw_player_progress(s,percent,elapsed,duration,w);
     label(s,paused?"已暂停":s_buffering?"缓冲中":"正在播放",15,279,100,13,9,t->netease_red,LV_TEXT_ALIGN_LEFT);
@@ -480,7 +482,11 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
     eyeline(s,eye,"");heading(s,title);
     if(page==DEVICE_MUSIC_PREF_PLAYBACK_MODE && detail && detail[0])
         label(s,detail,15,224,210,40,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
-    if(page==DEVICE_MUSIC_PREF_NETWORK) { pair(s,"Wi-Fi",detail?detail:"未连接",94);pair(s,"连接状态",s_connected?"已连接":"未连接",132);y=170; }
+    if(page==DEVICE_MUSIC_PREF_NETWORK) {
+        label(s,detail?detail:"未连接",15,97,210,18,12,t->text,LV_TEXT_ALIGN_LEFT);
+        label(s,s_connected?"Wi-Fi 已取得 IP":"Wi-Fi 未取得 IP",15,119,210,14,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
+        y=142;
+    }
     if(page==DEVICE_MUSIC_PREF_ACCOUNT) {
         line(s,97,2,t->text);label(s,detail?detail:"当前音乐账号",15,110,210,20,12,t->green,LV_TEXT_ALIGN_LEFT);
         label(s,"登录状态已保存",15,135,210,16,10,t->muted_text,LV_TEXT_ALIGN_LEFT);
@@ -509,6 +515,18 @@ void device_music_ui_draw_preferences(lv_obj_t *s,device_music_ui_preference_t p
         label(s,detail?detail:"日夜跟随北京时间自动切换",15,271,210,14,9,t->muted_text,LV_TEXT_ALIGN_LEFT);
     }
     device_music_ui_footer_t footer={"上移",page==DEVICE_MUSIC_PREF_ABOUT?"返回":"确认","下移"};draw_footer(s,&footer);
+}
+void device_music_ui_draw_network_test(lv_obj_t *s,const char *platform,const char *status,
+                                       bool running,const char *hint)
+{
+    const device_music_ui_theme_t *t=device_music_ui_theme();
+    eyeline(s,platform?platform:"NETWORK / 网络","");heading(s,"网络连通测试");
+    line(s,110,1,t->divider);
+    label(s,status?status:"检测中",15,139,210,40,24,t->text,LV_TEXT_ALIGN_CENTER);
+    label(s,hint?hint:"",15,195,210,48,12,t->muted_text,LV_TEXT_ALIGN_CENTER);
+    line(s,253,1,t->divider);
+    folio(s,"长按 OK · 返回网络");
+    device_music_ui_footer_t footer={"—",running?"检测中":"重试","—"};draw_footer(s,&footer);
 }
 void device_music_ui_update_volume_overlay(const device_music_ui_volume_widgets_t *w,int percent)
 {

@@ -7,6 +7,7 @@
 #include "display_settings.h"
 #include "music_lyrics.h"
 #include "music_playback_order.h"
+#include "network_diagnostics.h"
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include "demo_radio.h"
 #include "netease_app_logic.h"
@@ -42,6 +43,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <stdatomic.h>
 
 #ifdef CONFIG_NETEASE_DIRECT
 #define NETEASE_APP_NAMESPACE "netease_wifi"
@@ -80,6 +82,7 @@ typedef enum {
     NETEASE_WORK_PREFETCH_TRACKS,
     NETEASE_WORK_ORDER_STEP,
     NETEASE_WORK_SAVE_MODE,
+    NETEASE_WORK_TEST_NETWORK,
 } netease_work_t;
 
 static const char *TAG = "netease_app";
@@ -112,6 +115,12 @@ static lv_image_dsc_t s_cover_image;
 static char *s_lyric_text;
 static char s_current_lyric[256];
 static const char *s_lyric_status;
+static const char *s_cover_status;
+static network_diagnostics_result_t s_network_result;
+static atomic_uint s_network_generation;
+static unsigned s_network_request_generation;
+static bool s_network_running;
+static const char *s_network_hint;
 static netease_track_list_t s_playing_tracks;
 static netease_track_t s_now_playing;
 static int64_t s_playing_playlist_id;
@@ -372,6 +381,7 @@ static const char *work_name(netease_work_t work)
     case NETEASE_WORK_PREFETCH_TRACKS:return "prefetch_tracks";
     case NETEASE_WORK_ORDER_STEP:return "order_step";
     case NETEASE_WORK_SAVE_MODE:return "save_mode";
+    case NETEASE_WORK_TEST_NETWORK:return "test_network";
     case NETEASE_WORK_NONE:
     default:return "none";
     }
@@ -1075,12 +1085,11 @@ static esp_err_t load_track_url(void)
     if(err!=ESP_OK)return err;
 #ifdef CONFIG_NETEASE_DIRECT
     lv_image_dsc_t cover={0};char cover_url[256];
-    bool is_qq=music_provider_platform()==MUSIC_PLATFORM_QQ;
-    esp_err_t cover_err=is_qq?ESP_ERR_NOT_FOUND:netease_direct_get_cover_url(s_url_tracks.items[index].id,cover_url,sizeof(cover_url));
+    esp_err_t cover_err=music_provider_cover_url(&s_url_tracks.items[index],cover_url,sizeof(cover_url));
     if(cover_err==ESP_OK && request_is_current())cover_err=music_artwork_load(cover_url,&cover);
     if(cover_err!=ESP_OK)ESP_LOGW(TAG,"Cover omitted: %s",esp_err_to_name(cover_err));
-    char *lyrics=s_exit_requested || is_qq?NULL:malloc(8192);
-    esp_err_t lyric_err=is_qq?ESP_ERR_NOT_FOUND:lyrics?netease_direct_get_lyrics(s_url_tracks.items[index].id,lyrics,8192):ESP_ERR_NO_MEM;
+    char *lyrics=request_is_current()?malloc(8192):NULL;
+    esp_err_t lyric_err=lyrics?music_provider_lyrics(&s_url_tracks.items[index],lyrics,8192):ESP_ERR_NO_MEM;
     if(lyric_err!=ESP_OK) { free(lyrics);lyrics=NULL;ESP_LOGW(TAG,"Lyrics unavailable: %s",esp_err_to_name(lyric_err)); }
     if(lyrics) {
         size_t bytes=strlen(lyrics)+1;
@@ -1089,9 +1098,16 @@ static esp_err_t load_track_url(void)
         ESP_LOGI(TAG,"Lyrics retained: bytes=%u",(unsigned)bytes);
     }
     if(!bsp_lvgl_lock(0)) { free((void *)cover.data);free(lyrics);return ESP_ERR_TIMEOUT; }
-    if(s_exit_requested) { bsp_lvgl_unlock();free((void *)cover.data);free(lyrics);return ESP_ERR_INVALID_STATE; }
+    if(!request_is_current()) { bsp_lvgl_unlock();free((void *)cover.data);free(lyrics);return ESP_ERR_INVALID_STATE; }
     s_cover_image=cover;s_lyric_text=lyrics;
-    s_lyric_status=lyric_err==ESP_ERR_NOT_FOUND?"暂无歌词":lyric_err==ESP_OK?"":"歌词读取失败";
+    s_cover_status=cover_err==ESP_OK?NULL:cover_err==ESP_ERR_NOT_FOUND?"暂无封面":
+        cover_err==ESP_ERR_NO_MEM?"封面内存不足":cover_err==ESP_ERR_INVALID_SIZE?"封面超限":"封面读取失败";
+    music_lyrics_kind_t kind=music_lyrics_classify(lyrics);
+    s_lyric_status=lyric_err==ESP_ERR_NOT_FOUND?"暂无歌词":
+        lyric_err==ESP_ERR_NO_MEM?"歌词内存不足":lyric_err==ESP_ERR_INVALID_SIZE?"歌词超限":
+        lyric_err!=ESP_OK?"歌词读取失败":kind==MUSIC_LYRICS_INSTRUMENTAL?"纯音乐":
+        kind==MUSIC_LYRICS_UNTIMED?"无时间轴歌词":kind==MUSIC_LYRICS_EMPTY?"暂无歌词":"等待歌词";
+    if(kind!=MUSIC_LYRICS_TIMED) { free(s_lyric_text);s_lyric_text=NULL; }
     bsp_lvgl_unlock();
 #endif
     if (err == ESP_OK && request_is_current()) {
@@ -1204,6 +1220,47 @@ static esp_err_t step_playback_order(void)
     return load_track_url();
 }
 
+typedef struct { unsigned generation; } network_request_t;
+static bool network_test_cancelled(void *context)
+{
+    const network_request_t *request=context;
+    return atomic_load(&s_network_generation)!=request->generation;
+}
+static void network_test_publish(const network_diagnostics_result_t *result,void *context)
+{
+    if(network_test_cancelled(context))return;
+    if(!bsp_lvgl_lock(0))return;
+    if(!network_test_cancelled(context) && !s_exit_requested && s_logic.state==NETEASE_APP_NETWORK_TEST) {
+        s_network_result=*result;s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
+        render_netease_ui();
+    }
+    bsp_lvgl_unlock();
+}
+static void run_network_test(void)
+{
+    network_request_t request={s_network_request_generation};
+    network_diagnostics_result_t result;
+    network_diagnostics_callbacks_t callbacks={network_test_publish,network_test_cancelled,&request};
+    network_diagnostics_config_t config={.url="https://interfacepc.music.163.com/"};
+#ifdef CONFIG_NETEASE_DIRECT
+    if(music_provider_platform()==MUSIC_PLATFORM_QQ)config.url="https://u.y.qq.com/";
+    netease_direct_client_release_connection();
+#endif
+    network_diagnostics_run(&config,&callbacks,&result);
+    for(unsigned i=0;i<6;i++) {
+        if(i==1)continue; /* 不在诊断日志记录本地 IP。 */
+        char line[160];network_diagnostics_format_line(&result,i,line,sizeof(line));
+        ESP_LOGI(TAG,"Network test result: %s",line);
+    }
+    if(!bsp_lvgl_lock(0))return;
+    if(!network_test_cancelled(&request) && !s_exit_requested && s_logic.state==NETEASE_APP_NETWORK_TEST) {
+        s_network_result=result;s_network_running=false;
+        s_network_hint=NULL;
+        s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
+    }
+    bsp_lvgl_unlock();
+}
+
 static void worker_task(void *arg)
 {
     (void)arg;
@@ -1229,7 +1286,9 @@ static void worker_task(void *arg)
 #endif
 
         esp_err_t err = ESP_OK;
-        if(work==NETEASE_WORK_PREFETCH_TRACKS) {
+        if(work==NETEASE_WORK_TEST_NETWORK) {
+            run_network_test();
+        } else if(work==NETEASE_WORK_PREFETCH_TRACKS) {
             err=prefetch_tracks();
         } else if (work == NETEASE_WORK_START_QR) {
             err = run_qr_login();
@@ -1372,6 +1431,28 @@ static void request_work(netease_work_t work)
     }
 }
 
+/* 调用方持 UI 锁；仅采集基础状态并排队，完整网络等待交给 worker。 */
+static void request_network_test(void)
+{
+    atomic_fetch_add(&s_network_generation,1);
+    s_network_running=false;s_network_hint=NULL;
+    network_diagnostics_collect_basic(&s_network_result);
+    s_network_result.complete=true;
+    if(s_logic.playing || audio_stream_state()==AUDIO_STREAM_PLAYING || audio_stream_state()==AUDIO_STREAM_BUFFERING) {
+        s_network_hint="请先暂停播放，再按 OK 检测";
+    } else if((s_worker_busy && s_active_work!=NETEASE_WORK_PREFETCH_TRACKS) || s_work!=NETEASE_WORK_NONE) {
+        s_network_hint="后台任务未结束，请稍后重试";
+    } else {
+        release_track_cache();
+        s_network_request_generation=atomic_load(&s_network_generation);
+        s_network_running=true;
+        s_network_hint="正在检测，可长按 OK 返回";
+        s_work=NETEASE_WORK_TEST_NETWORK;
+        if(s_worker_task)xTaskNotifyGive(s_worker_task);
+    }
+    s_rendered_screen=DEVICE_MUSIC_SCREEN_COUNT;
+}
+
 static device_music_screen_t screen_for_state(void)
 {
 #ifdef CONFIG_NETEASE_DIRECT
@@ -1395,7 +1476,7 @@ static device_music_screen_t screen_for_state(void)
     case NETEASE_APP_NAVIGATION:case NETEASE_APP_SETTINGS:case NETEASE_APP_APPEARANCE:
     case NETEASE_APP_BRIGHTNESS:case NETEASE_APP_SCREEN_TIMEOUT:case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:
     case NETEASE_APP_LOGOUT_CONFIRM:case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_ABOUT:case NETEASE_APP_ENDED:
-    case NETEASE_APP_PLAYBACK_MODE:
+    case NETEASE_APP_PLAYBACK_MODE:case NETEASE_APP_NETWORK_TEST:
         return DEVICE_MUSIC_SCREEN_TRACKS;
     case NETEASE_APP_ERROR:
     default:
@@ -1472,6 +1553,7 @@ static void draw_player(lv_obj_t *screen, bool playing)
     int elapsed=(int)audio_stream_elapsed_ms();
     music_lyrics_line(s_lyric_text,(uint32_t)elapsed,s_current_lyric,sizeof(s_current_lyric));
     device_music_ui_set_media(s_cover_image.data?&s_cover_image:NULL,s_current_lyric[0]?s_current_lyric:s_lyric_status);
+    device_music_ui_set_artwork_status(s_cover_status);
     device_music_ui_set_playback_context(s_playing_number,s_playing_heading,audio_stream_volume());
     device_music_ui_set_playback_mode(s_mode==MUSIC_PLAYBACK_SHUFFLE);
     device_music_ui_set_buffering(s_audio_started && playing && audio_stream_state()==AUDIO_STREAM_BUFFERING);
@@ -1551,7 +1633,23 @@ static void render_netease_ui(void)
         device_music_ui_set_footer(screen,"选择","进入","—");
     } else
 #endif
-    if (s_logic.state >= NETEASE_APP_NAVIGATION && screen_id!=DEVICE_MUSIC_SCREEN_LOADING_TRACK) {
+    if(s_logic.state==NETEASE_APP_NETWORK_TEST) {
+        bool connected=s_network_result.https.state==NETWORK_DIAGNOSTICS_PASS;
+        bool not_tested=s_network_result.https.reason==NETWORK_DIAGNOSTICS_BASIC_ONLY;
+        bool unavailable=s_network_result.https.reason==NETWORK_DIAGNOSTICS_NO_MEMORY ||
+            s_network_result.https.reason==NETWORK_DIAGNOSTICS_BUSY;
+        const char *status=s_network_running?"检测中":connected?"网络连通":
+            (not_tested || unavailable)?"检测未完成":"网络未连通";
+        char reason[160]={0};
+        if(!s_network_running && !connected && !s_network_hint)
+            network_diagnostics_format_line(&s_network_result,5,reason,sizeof(reason));
+        const char *platform="NETWORK / 网络";
+#ifdef CONFIG_NETEASE_DIRECT
+        platform=music_provider_name();
+#endif
+        device_music_ui_draw_network_test(screen,platform,status,s_network_running,
+            s_network_hint?s_network_hint:reason);
+    } else if (s_logic.state >= NETEASE_APP_NAVIGATION && screen_id!=DEVICE_MUSIC_SCREEN_LOADING_TRACK) {
         const char *const nav[]={"播放模式","返回播放","当前歌曲列表","我的歌单","音量","设置"};
         const char *const modes[]={s_mode==MUSIC_PLAYBACK_SEQUENTIAL?"顺序播放 · 当前":"顺序播放",
                                   s_mode==MUSIC_PLAYBACK_SHUFFLE?"随机播放 · 当前":"随机播放","返回导航"};
@@ -1565,7 +1663,7 @@ static void render_netease_ui(void)
             timeouts[i]=timeout_rows[i];
         }
         timeouts[DISPLAY_TIMEOUT_OPTION_COUNT]="返回显示";
-        const char *const network[]={"重新配网","返回设置"};
+        const char *const network[]={"网络连通测试","重新配网","返回设置"};
         const char *const account[]={"退出当前账号","返回设置"};
         const char *const logout[]={"取消，保留登录","确认退出账号"};
         const char *const reset[]={"取消，保留网络","确认重新配网"};
@@ -1576,7 +1674,7 @@ static void render_netease_ui(void)
         case NETEASE_APP_PLAYBACK_MODE:items=modes;n=3;title="播放模式";detail=s_mode_status;break;
         case NETEASE_APP_APPEARANCE:items=appearance;n=3;title="显示与日夜";detail=display_settings_clock_status();break;
         case NETEASE_APP_SCREEN_TIMEOUT:items=timeouts;n=DISPLAY_TIMEOUT_OPTION_COUNT+1;title="熄屏";break;
-        case NETEASE_APP_NETWORK:items=network;n=2;title="网络";detail=s_saved.ssid;break;
+        case NETEASE_APP_NETWORK:items=network;n=3;title="网络";detail=s_saved.ssid;break;
         case NETEASE_APP_ACCOUNT:items=account;n=2;title="账号";detail=s_nickname[0]?s_nickname:"当前音乐账号";break;
         case NETEASE_APP_LOGOUT_CONFIRM:items=logout;n=2;title="退出当前账号？";detail="仅清除此平台本机登录";break;
         case NETEASE_APP_WIFI_CONFIRM:items=reset;n=2;title="重新连接 Wi-Fi？";detail="清除网络，保留各平台登录";break;
@@ -1779,6 +1877,8 @@ void netease_app_enter(void)
     memset(&s_track_url, 0, sizeof(s_track_url));
     memset(&s_client, 0, sizeof(s_client));
     s_message[0] = '\0';
+    atomic_fetch_add(&s_network_generation,1);
+    s_network_running=false;s_network_hint=NULL;s_cover_status=NULL;
     s_qr_payload[0] = '\0';
     s_track_heading[0] = '\0';
     s_track_playlist_id = 0;
@@ -1831,6 +1931,7 @@ void netease_app_enter(void)
 
 void netease_app_exit(void)
 {
+    atomic_fetch_add(&s_network_generation,1);s_network_running=false;
     s_exit_requested = true;
     audio_stream_stop();
     if (s_timer) {
@@ -1961,6 +2062,17 @@ void netease_app_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     bool work_pending = (s_worker_busy && s_active_work!=NETEASE_WORK_PREFETCH_TRACKS) || s_work != NETEASE_WORK_NONE;
     if(work_pending) {
         netease_work_t active=s_work!=NETEASE_WORK_NONE?s_work:s_active_work;
+        if(active==NETEASE_WORK_TEST_NETWORK) {
+            netease_app_logic_t candidate=s_logic;
+            netease_app_action_t pending=netease_app_logic_on_button(&candidate,button,event);
+            if(pending==NETEASE_APP_ACTION_NONE && !candidate.volume_overlay) {
+                if(s_logic.state==NETEASE_APP_NETWORK_TEST && candidate.state!=NETEASE_APP_NETWORK_TEST) {
+                    atomic_fetch_add(&s_network_generation,1);s_network_running=false;
+                }
+                s_logic=candidate;render_netease_ui();
+            }
+            return;
+        }
         if((active==NETEASE_WORK_START_QR || active==NETEASE_WORK_SWITCH_ACCOUNT) && s_logic.state==NETEASE_APP_LOGIN_QR && s_qr_payload[0] && button==NETEASE_APP_BTN_OK && event==NETEASE_APP_BTN_CLICK) {
             s_qr_refresh_requested=true;s_qr_payload[0]='\0';render_netease_ui();return;
         }
@@ -2047,7 +2159,9 @@ void netease_app_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         s_platform_return_requested=true;s_work=NETEASE_WORK_START_QR;xTaskNotifyGive(s_worker_task);return;
     }
 #endif
-    if(action==NETEASE_APP_ACTION_SET_PLAYBACK_MODE) {
+    if(action==NETEASE_APP_ACTION_TEST_NETWORK) {
+        request_network_test();
+    } else if(action==NETEASE_APP_ACTION_SET_PLAYBACK_MODE) {
         s_requested_mode=(music_playback_mode_t)s_logic.selected;
         s_mode_status[0]=0;
         request_work(NETEASE_WORK_SAVE_MODE);

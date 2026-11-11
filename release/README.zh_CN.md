@@ -4,11 +4,11 @@
 
 # 固件交付目录
 
-## 当前本地交付：Folo Music 2.2.0
+## 当前本地交付：Folo Music 2.3.0
 
-完整镜像为 FoloMusic-v2.2.0/FoloMusic-v2.2.0-full-8MB.bin，严格 8,388,608 字节。SHA-256：2c27c232d353a73b8c2cf519affdc8c1be88d871e381907067d196328304de96。
+完整镜像为 FoloMusic-v2.3.0/FoloMusic-v2.3.0-full-8MB.bin，严格 8,388,608 字节。SHA-256：6c251108afe22251074e422fd436ef7a0a3e41708d5cf21facb81c32b99610b9。
 
-同目录包含 app 升级包、manifest.json 和 SHA256SUMS.txt。生成的 FoloMusic-v*/ 目录不进入 Git；新克隆的仓库需按[部署指南](../docs/deployment.md)构建，打包时加 --version 2.2.0；变更、已知问题及验收边界见[2.2.0 说明](../docs/releases/v2.2.0.zh_CN.md)。本次源码推送不等于创建 GitHub Release。
+同目录包含 app 升级包、manifest.json 和 SHA256SUMS.txt。生成的 FoloMusic-v*/ 目录不进入 Git；新克隆的仓库需按[部署指南](../docs/deployment.md)构建，打包时加 --version 2.3.0；变更、已知问题及验收边界见[2.3.0 说明](../docs/releases/v2.3.0.zh_CN.md)。本次源码推送不等于创建 GitHub Release。
 
 完整镜像从 0x0 烧录，会清空 Wi-Fi、登录和显示设置；仅在匹配 7 MiB factory 分区时，只写 app 0x10000 才保留设置。公开镜像 NVS/PHY 为空白，不含已配置设备的凭据。
 

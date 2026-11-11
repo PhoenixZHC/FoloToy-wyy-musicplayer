@@ -1,6 +1,6 @@
 # FoloToy AI Passport
 
-> 本分支当前产品为 Folo Music 2.2.0。请先看[产品文档索引](../../../docs/README.md)和[2.2.0 说明](../../../docs/releases/v2.2.0.zh_CN.md)；下文保留上游硬件与开发参考。
+> 本分支当前产品为 Folo Music 2.3.0。请先看[产品文档索引](../../../docs/README.md)和[2.3.0 说明](../../../docs/releases/v2.3.0.zh_CN.md)；下文保留上游硬件与开发参考。
 
 [English](README.md) | 简体中文
 

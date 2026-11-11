@@ -4,11 +4,11 @@
 
 # Firmware delivery directory
 
-## Current local delivery: Folo Music 2.2.0
+## Current local delivery: Folo Music 2.3.0
 
-The complete image is FoloMusic-v2.2.0/FoloMusic-v2.2.0-full-8MB.bin, exactly 8,388,608 bytes. SHA-256: 2c27c232d353a73b8c2cf519affdc8c1be88d871e381907067d196328304de96.
+The complete image is FoloMusic-v2.3.0/FoloMusic-v2.3.0-full-8MB.bin, exactly 8,388,608 bytes. SHA-256: 6c251108afe22251074e422fd436ef7a0a3e41708d5cf21facb81c32b99610b9.
 
-The same directory contains the app-only image, manifest.json and SHA256SUMS.txt. Generated FoloMusic-v*/ directories are excluded from Git. A fresh checkout must build the files using the [deployment guide](../docs/deployment.md), including --version 2.2.0; see [2.2.0 notes](../docs/releases/v2.2.0.md) for changes, known defects and acceptance limits. This source push does not publish a GitHub Release.
+The same directory contains the app-only image, manifest.json and SHA256SUMS.txt. Generated FoloMusic-v*/ directories are excluded from Git. A fresh checkout must build the files using the [deployment guide](../docs/deployment.md), including --version 2.3.0; see [2.3.0 notes](../docs/releases/v2.3.0.md) for changes, known defects and acceptance limits. This source push does not publish a GitHub Release.
 
 The full image flashes at 0x0 and clears Wi-Fi, login and display settings. App-only flashing at 0x10000 preserves settings only with the matching 7 MiB factory partition. Public images contain blank NVS/PHY and no configured-device credentials.
 

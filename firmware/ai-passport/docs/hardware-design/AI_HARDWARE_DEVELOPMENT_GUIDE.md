@@ -156,7 +156,7 @@ The audio demo's three-second recording buffer is about 96 KB and is the largest
 
 ## 9. CW2017 fuel gauge
 
-Initialization reads VERSION, writes CONFIG `0x00`, waits 100 ms, and uses the chip's built-in Li-Poly profile. The repository intentionally does not write a custom cell profile.
+Initialization reads VERSION, resets the gauge, writes the firmware default 80-byte 4.2 V Li-Poly profile at `0x10–0x5f`, applies the mode/wake sequence, and polls SOC/voltage up to 20 times at 250 ms intervals before starting the application. This is not a ROM profile or a calibrated cell-specific profile. On the tested board it recovered SOC from `0xFE` to 98% at 4145 mV; the user confirmed the percentage display. The shared I2C bus and pins are unchanged.
 
 - SOC uses registers `0x04–0x05`; values above 100 are treated as not ready and return `-1`.
 - Voltage uses the 14-bit value at `0x02–0x03`, converted as `raw × 312.5 µV`, and returned in mV.

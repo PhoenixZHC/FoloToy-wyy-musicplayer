@@ -95,6 +95,11 @@ void device_music_ui_set_network(bool connected, unsigned signal_level);
 void device_music_ui_set_clock(int hour, int minute, bool valid);
 /* Call while holding the UI lock; image data must outlive its widgets. */
 void device_music_ui_set_media(const lv_image_dsc_t *image, const char *lyric);
+void device_music_ui_set_artwork_status(const char *status);
+/* 单页连通结论；不在 UI 内执行网络操作。 */
+void device_music_ui_draw_network_test(lv_obj_t *screen,const char *platform,
+                                       const char *status,bool running,
+                                       const char *hint);
 void device_music_ui_update_lyric(const device_music_ui_player_widgets_t *widgets, const char *lyric);
 
 typedef enum {

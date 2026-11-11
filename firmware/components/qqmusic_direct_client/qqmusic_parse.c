@@ -32,6 +32,52 @@ static esp_err_t business(uint64_t code)
     if(code==104003 || code==104004 || code==104013) return QQMUSIC_ERR_UNAVAILABLE;
     return QQMUSIC_ERR_REJECTED;
 }
+static bool valid_mid(const char mid[QQMUSIC_MID_MAX])
+{
+    if(!mid[0])return false;
+    for(size_t i=0;i<QQMUSIC_MID_MAX;i++) {
+        unsigned char c=(unsigned char)mid[i];
+        if(!c)return true;
+        if(!((c>='0' && c<='9') || (c>='A' && c<='Z') || (c>='a' && c<='z')))return false;
+    }
+    return false;
+}
+esp_err_t qqmusic_cover_url(const qqmusic_track_t *track,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!track || !out || !capacity)return ESP_ERR_INVALID_ARG;
+    if(!track->album_mid[0])return ESP_ERR_NOT_FOUND;
+    if(!valid_mid(track->album_mid))return ESP_ERR_INVALID_RESPONSE;
+    /* 官方CDN实测支持90×90，60×60返回404；图片模块负责有界缩小。 */
+    int n=snprintf(out,capacity,"https://y.gtimg.cn/music/photo_new/T002R90x90M000%s.jpg",track->album_mid);
+    if(n<0 || (size_t)n>=capacity) { out[0]=0;return ESP_ERR_INVALID_SIZE; }
+    return ESP_OK;
+}
+esp_err_t qqmusic_lyrics_url(const qqmusic_track_t *track,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!track || !out || !capacity)return ESP_ERR_INVALID_ARG;
+    if(!valid_mid(track->mid))return ESP_ERR_INVALID_RESPONSE;
+    int n=snprintf(out,capacity,"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=%s&format=json&nobase64=1",track->mid);
+    if(n<0 || (size_t)n>=capacity) { out[0]=0;return ESP_ERR_INVALID_SIZE; }
+    return ESP_OK;
+}
+esp_err_t qqmusic_parse_lyrics(const char *json,size_t length,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!json || !out || !capacity)return ESP_ERR_INVALID_ARG;
+    if(length>QQMUSIC_LYRICS_RESPONSE_MAX)return ESP_ERR_INVALID_SIZE;
+    qqmusic_json_t root,lyric;uint64_t code,retcode,subcode;
+    if(!qqmusic_json_parse(json,length,&root) || !number(root,"retcode",&retcode) ||
+       !number(root,"code",&code) || !number(root,"subcode",&subcode))return ESP_ERR_INVALID_RESPONSE;
+    esp_err_t err=business(retcode?retcode:code?code:subcode);
+    if(err!=ESP_OK)return err;
+    if(!qqmusic_json_member(root,"lyric",&lyric) || lyric.length<2 || lyric.text[0]!='"')return ESP_ERR_INVALID_RESPONSE;
+    size_t limit=capacity>QQMUSIC_LYRICS_MAX_BYTES+1?QQMUSIC_LYRICS_MAX_BYTES+1:capacity;
+    if(!qqmusic_json_string(lyric,out,limit)) { out[0]=0;return ESP_ERR_INVALID_SIZE; }
+    if(!out[0])return ESP_ERR_NOT_FOUND;
+    return ESP_OK;
+}
 esp_err_t qqmusic_parse_response(const char *json,size_t length,qqmusic_json_t *data)
 {
     if(!data) return ESP_ERR_INVALID_ARG;

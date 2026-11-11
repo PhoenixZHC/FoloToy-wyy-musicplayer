@@ -131,3 +131,31 @@ esp_err_t music_provider_url(const netease_track_t *track,int bitrate,netease_tr
     }
     memset(audio,0,sizeof(*audio));free(audio);return mapped(err);
 }
+esp_err_t music_provider_cover_url(const netease_track_t *track,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!track || !out || !capacity)return ESP_ERR_INVALID_ARG;
+    if(s_blocked)return ESP_ERR_INVALID_STATE;
+    esp_err_t err;
+    if(s_platform==MUSIC_PLATFORM_NETEASE)err=netease_direct_get_cover_url(track->id,out,capacity);
+    else {
+        qqmusic_track_t source={0};memcpy(source.album_mid,track->qq_album_mid,sizeof(source.album_mid));
+        err=qqmusic_cover_url(&source,out,capacity);
+    }
+    if(err!=ESP_OK)out[0]=0;
+    return mapped(err);
+}
+esp_err_t music_provider_lyrics(const netease_track_t *track,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!track || !out || !capacity)return ESP_ERR_INVALID_ARG;
+    if(s_blocked)return ESP_ERR_INVALID_STATE;
+    esp_err_t err;
+    if(s_platform==MUSIC_PLATFORM_NETEASE)err=netease_direct_get_lyrics(track->id,out,capacity);
+    else {
+        qqmusic_track_t source={0};memcpy(source.mid,track->qq_mid,sizeof(source.mid));
+        err=qqmusic_client_lyrics(&s_qq,&source,out,capacity);
+    }
+    if(err!=ESP_OK)out[0]=0;
+    return mapped(err);
+}

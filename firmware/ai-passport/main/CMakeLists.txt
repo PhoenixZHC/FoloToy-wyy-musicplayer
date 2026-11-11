@@ -8,7 +8,7 @@ if(QQMUSIC_DEVICE_PREFLIGHT)
     list(APPEND direct_sources "../tests/qqmusic_preflight_wifi.c")
 endif()
 if(CONFIG_NETEASE_DIRECT)
-    list(APPEND direct_sources "netease_direct_adapter.c" "music_artwork.c" "music_provider.c" "music_qr_image.c")
+    list(APPEND direct_sources "netease_direct_adapter.c" "music_artwork.c" "music_artwork_policy.c" "music_provider.c" "music_qr_image.c")
 endif()
 idf_component_register(
 	    SRCS ${app_entry} ${direct_sources}
@@ -34,8 +34,9 @@ idf_component_register(
 	         "demo_radio.c"
 		         "netease_app_logic.c" "music_lyrics.c" "music_playback_order.c"
 	         "netease_app.c"
+                 "network_diagnostics.c"
          "wifi_provisioning_logic.c"
          "wifi_provisioning_page.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_usb_serial_jtag esp_http_server json esp_app_format audio_stream bsp esp_event esp_hw_support esp_netif esp_timer esp_wifi lwip nvs_flash netease_client netease_direct_client qqmusic_direct_client
+    REQUIRES esp_driver_usb_serial_jtag esp_http_server json esp_app_format audio_stream bsp esp_event esp_hw_support esp_netif esp_timer esp_wifi lwip mbedtls bounded_http nvs_flash netease_client netease_direct_client qqmusic_direct_client
 )

@@ -8,12 +8,33 @@ static const char *timestamp(const char *p, uint32_t *ms)
     if(*p++!='[' || !isdigit((unsigned char)*p))return NULL;
     unsigned minutes=0,seconds=0,fraction=0,scale=100;
     while(isdigit((unsigned char)*p)) { if(minutes>1000)return NULL;minutes=minutes*10+(unsigned)(*p++-'0'); }
-    if(*p++!=':' || !isdigit((unsigned char)p[0]) || !isdigit((unsigned char)p[1]))return NULL;
+    if(*p!=':')return NULL;
+    ++p;
+    if(!isdigit((unsigned char)p[0]) || !isdigit((unsigned char)p[1]))return NULL;
     seconds=(unsigned)(p[0]-'0')*10+(unsigned)(p[1]-'0');p+=2;if(seconds>=60)return NULL;
     if(*p=='.') { ++p;if(!isdigit((unsigned char)*p))return NULL;
         while(isdigit((unsigned char)*p)) { fraction+=(unsigned)(*p++-'0')*scale;scale/=10; } }
-    if(*p++!=']')return NULL;
+    if(*p!=']')return NULL;
+    ++p;
     *ms=minutes*60000+seconds*1000+fraction;return p;
+}
+
+music_lyrics_kind_t music_lyrics_classify(const char *lrc)
+{
+    if(!lrc || !lrc[0])return MUSIC_LYRICS_EMPTY;
+    if(strstr(lrc,"纯音乐，请欣赏") || strstr(lrc,"没有填词的纯音乐"))return MUSIC_LYRICS_INSTRUMENTAL;
+    bool content=false;
+    for(const char *p=lrc;*p;) {
+        const char *end=strchr(p,'\n');if(!end)end=p+strlen(p);
+        const char *text=p,*next;uint32_t ms;
+        bool timed=false;
+        while((next=timestamp(text,&ms)) && next<=end) { timed=true;text=next; }
+        while(text<end && isspace((unsigned char)*text))++text;
+        if(timed && text<end)return MUSIC_LYRICS_TIMED;
+        if(text<end && *text!='[')content=true;
+        p=*end?end+1:end;
+    }
+    return content?MUSIC_LYRICS_UNTIMED:MUSIC_LYRICS_EMPTY;
 }
 
 void music_lyrics_line(const char *lrc, uint32_t elapsed_ms, char *out, size_t capacity)

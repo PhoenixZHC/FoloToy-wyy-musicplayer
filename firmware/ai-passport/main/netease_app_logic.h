@@ -28,6 +28,7 @@ typedef enum {
     NETEASE_APP_SCREEN_TIMEOUT,
     NETEASE_APP_PLAYBACK_MODE,
     NETEASE_APP_PLATFORM,
+    NETEASE_APP_NETWORK_TEST,
 } netease_app_state_t;
 
 typedef enum {
@@ -58,6 +59,7 @@ typedef enum {
     NETEASE_APP_ACTION_SET_PLAYBACK_MODE,
     NETEASE_APP_ACTION_SWITCH_PLATFORM,
     NETEASE_APP_ACTION_SELECT_PLATFORM,
+    NETEASE_APP_ACTION_TEST_NETWORK,
 } netease_app_action_t;
 
 typedef struct {

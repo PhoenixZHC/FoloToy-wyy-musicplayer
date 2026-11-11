@@ -3,6 +3,8 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_random.h"
+#include "esp_timer.h"
+#include "bounded_http.h"
 #include "nvs.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -276,4 +278,60 @@ esp_err_t qqmusic_client_audio(qqmusic_client_t *client,const qqmusic_track_t *t
     char *raw=NULL;qqmusic_json_t data;err=request(client,"music.vkey.GetVkey","UrlGetVkey",params,&raw,&data);
     if(err==ESP_OK) err=qqmusic_parse_audio(data,dispatch,track,out);
     secret_free(raw);secret_free(dispatch_raw);return err;
+}
+
+static esp_err_t lyrics_remaining(esp_http_client_handle_t http,int64_t deadline)
+{
+    int64_t remaining=deadline-esp_timer_get_time();
+    if(remaining<=0)return ESP_ERR_TIMEOUT;
+    return esp_http_client_set_timeout_ms(http,(int)((remaining+999)/1000));
+}
+esp_err_t qqmusic_client_lyrics(qqmusic_client_t *client,const qqmusic_track_t *track,char *out,size_t capacity)
+{
+    if(out && capacity)out[0]=0;
+    if(!track || !out || !capacity || !client)return ESP_ERR_INVALID_ARG;
+    if(!client->credential || client->blocked)return ESP_ERR_INVALID_STATE;
+    char url[192];esp_err_t err=qqmusic_lyrics_url(track,url,sizeof(url));
+    if(err!=ESP_OK)return err;
+    char *raw=malloc(QQMUSIC_LYRICS_RESPONSE_MAX+1);if(!raw)return ESP_ERR_NO_MEM;
+    /* 公共只读接口无需鉴权，不将音乐会话或Cookie发送到歌词域名。 */
+    esp_http_client_config_t config={.url=url,.method=HTTP_METHOD_GET,.timeout_ms=10000,
+        .buffer_size=1024,.buffer_size_tx=512,.crt_bundle_attach=esp_crt_bundle_attach,.disable_auto_redirect=true,
+        .is_async=true,.event_handler=bounded_http_event_handler};
+    int64_t deadline=esp_timer_get_time()+INT64_C(10000000);
+    esp_http_client_handle_t http=esp_http_client_init(&config);size_t used=0;
+    err=http?ESP_OK:ESP_ERR_NO_MEM;
+    if(err==ESP_OK)err=esp_http_client_set_header(http,"Referer","https://y.qq.com/");
+    if(err==ESP_OK)err=esp_http_client_set_header(http,"User-Agent","Mozilla/5.0");
+    if(err==ESP_OK)err=lyrics_remaining(http,deadline);
+    if(err==ESP_OK)err=bounded_http_open(http,deadline);
+    if(err==ESP_OK)err=bounded_http_make_blocking(http);
+    if(err==ESP_OK)err=bounded_http_start(http,deadline);
+    if(err==ESP_OK)err=lyrics_remaining(http,deadline);
+    if(err==ESP_OK) {
+        int64_t length=esp_http_client_fetch_headers(http);
+        int status=esp_http_client_get_status_code(http);
+        if(length<0)err=ESP_ERR_INVALID_RESPONSE;
+        else if(status==404)err=ESP_ERR_NOT_FOUND;
+        else if(status==401 || status==403)err=QQMUSIC_ERR_UNAVAILABLE;
+        else if(status!=200)err=ESP_ERR_INVALID_RESPONSE;
+        else if(length>QQMUSIC_LYRICS_RESPONSE_MAX)err=ESP_ERR_INVALID_SIZE;
+    }
+    while(err==ESP_OK && used<QQMUSIC_LYRICS_RESPONSE_MAX) {
+        err=lyrics_remaining(http,deadline);if(err!=ESP_OK)break;
+        size_t available=QQMUSIC_LYRICS_RESPONSE_MAX-used;if(available>1024)available=1024;
+        int n=esp_http_client_read(http,raw+used,(int)available);
+        if(n<0)err=ESP_FAIL;
+        else if(!n) { if(!esp_http_client_is_complete_data_received(http))err=ESP_ERR_INVALID_RESPONSE;break; }
+        else used+=(size_t)n;
+    }
+    if(err==ESP_OK)err=lyrics_remaining(http,deadline);
+    if(err==ESP_OK && used==QQMUSIC_LYRICS_RESPONSE_MAX && !esp_http_client_is_complete_data_received(http))err=ESP_ERR_INVALID_SIZE;
+    if(http && (bounded_http_expired(http) || esp_timer_get_time()>=deadline))err=ESP_ERR_TIMEOUT;
+    if(http) { bounded_http_stop(http);esp_http_client_cleanup(http); }
+    raw[used]=0;
+    if(err==ESP_OK)err=qqmusic_parse_lyrics(raw,used,out,capacity);
+    free(raw);
+    if(err!=ESP_OK)out[0]=0;
+    return err;
 }

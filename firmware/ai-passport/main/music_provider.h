@@ -14,4 +14,6 @@ void music_provider_nickname(char *out,size_t capacity);
 esp_err_t music_provider_playlists(netease_playlist_list_t *out);
 esp_err_t music_provider_tracks(int64_t id,uint32_t limit,uint32_t offset,netease_track_list_t *out);
 esp_err_t music_provider_url(const netease_track_t *track,int bitrate,netease_track_url_t *out);
+esp_err_t music_provider_cover_url(const netease_track_t *track,char *out,size_t capacity);
+esp_err_t music_provider_lyrics(const netease_track_t *track,char *out,size_t capacity);
 qqmusic_client_t *music_provider_qq_client(void);

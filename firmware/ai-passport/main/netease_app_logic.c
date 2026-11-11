@@ -114,7 +114,8 @@ static size_t menu_count(netease_app_state_t s)
     case NETEASE_APP_SETTINGS:return 6;
     case NETEASE_APP_APPEARANCE:return 3;
     case NETEASE_APP_SCREEN_TIMEOUT:return DISPLAY_TIMEOUT_OPTION_COUNT+1;
-    case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:case NETEASE_APP_LOGOUT_CONFIRM:case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_ENDED:return 2;
+    case NETEASE_APP_NETWORK:return 3;
+    case NETEASE_APP_ACCOUNT:case NETEASE_APP_LOGOUT_CONFIRM:case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_ENDED:return 2;
     default:return 0;
     }
 }
@@ -133,7 +134,7 @@ netease_app_action_t netease_app_logic_on_button(netease_app_logic_t *l, netease
         case NETEASE_APP_APPEARANCE:case NETEASE_APP_NETWORK:case NETEASE_APP_ACCOUNT:case NETEASE_APP_ABOUT:view(l,NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_BRIGHTNESS:case NETEASE_APP_SCREEN_TIMEOUT:view(l,NETEASE_APP_APPEARANCE);break;
         case NETEASE_APP_LOGOUT_CONFIRM:view(l,NETEASE_APP_SETTINGS);break;
-        case NETEASE_APP_WIFI_CONFIRM:view(l,NETEASE_APP_NETWORK);break;
+        case NETEASE_APP_WIFI_CONFIRM:case NETEASE_APP_NETWORK_TEST:view(l,NETEASE_APP_NETWORK);break;
         case NETEASE_APP_ERROR:view(l,l->error_return_state==NETEASE_APP_PLAYING?NETEASE_APP_TRACKS:l->error_return_state);break;
         default:l->return_state=l->state;view(l,NETEASE_APP_NAVIGATION);break;
         }
@@ -142,6 +143,10 @@ netease_app_action_t netease_app_logic_on_button(netease_app_logic_t *l, netease
     if(l->state==NETEASE_APP_BRIGHTNESS) {
         if(b==NETEASE_APP_BTN_OK) { view(l,NETEASE_APP_APPEARANCE);return NETEASE_APP_ACTION_NONE; }
         return b==NETEASE_APP_BTN_UP?NETEASE_APP_ACTION_BRIGHTNESS_UP:NETEASE_APP_ACTION_BRIGHTNESS_DOWN;
+    }
+    if(l->state==NETEASE_APP_NETWORK_TEST) {
+        if(b==NETEASE_APP_BTN_OK)return NETEASE_APP_ACTION_TEST_NETWORK;
+        return NETEASE_APP_ACTION_NONE;
     }
     if(l->state==NETEASE_APP_ERROR && b==NETEASE_APP_BTN_DOWN) {
         l->return_state=NETEASE_APP_ERROR;view(l,NETEASE_APP_NETWORK);
@@ -178,7 +183,9 @@ netease_app_action_t netease_app_logic_on_button(netease_app_logic_t *l, netease
         case NETEASE_APP_SCREEN_TIMEOUT:
             if(i<DISPLAY_TIMEOUT_OPTION_COUNT) { l->timeout_option=i;return NETEASE_APP_ACTION_SET_SCREEN_TIMEOUT; }
             view(l,NETEASE_APP_APPEARANCE);break;
-        case NETEASE_APP_NETWORK:view(l,i==0?NETEASE_APP_WIFI_CONFIRM:NETEASE_APP_SETTINGS);break;
+        case NETEASE_APP_NETWORK:
+            if(i==0) { view(l,NETEASE_APP_NETWORK_TEST);return NETEASE_APP_ACTION_TEST_NETWORK; }
+            view(l,i==1?NETEASE_APP_WIFI_CONFIRM:NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_ACCOUNT:view(l,i==0?NETEASE_APP_LOGOUT_CONFIRM:NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_LOGOUT_CONFIRM:if(i==1)return NETEASE_APP_ACTION_SWITCH_ACCOUNT;view(l,NETEASE_APP_SETTINGS);break;
         case NETEASE_APP_WIFI_CONFIRM:if(i==1)return NETEASE_APP_ACTION_RESET_CLOUD_SETUP;view(l,NETEASE_APP_NETWORK);break;

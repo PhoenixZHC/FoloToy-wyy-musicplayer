@@ -278,6 +278,9 @@ def check_device_font_contract(errors: list[str]) -> None:
             )
         if reference_characters is None:
             reference_characters = font_characters
+        elif size in (10, 14):
+            if not font_characters.issubset(reference_characters):
+                errors.append(f"{font_path.relative_to(ROOT)}: Chinese font is not covered by metadata fonts")
         elif font_characters != reference_characters:
             errors.append(f"{font_path.relative_to(ROOT)}: dynamic font character set differs")
 

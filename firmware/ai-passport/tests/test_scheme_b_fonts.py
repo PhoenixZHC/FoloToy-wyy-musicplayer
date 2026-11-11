@@ -48,6 +48,27 @@ class FontTests(unittest.TestCase):
                 recovered.extend(int(start) + int(n) for n in values.split(","))
             self.assertEqual(sorted(recovered), sorted(map(ord, chars)))
 
+    def test_japanese_korean_coverage_only_in_metadata_sizes(self):
+        chinese = fontgen.expanded_characters(set("Folo Music"))
+        metadata = fontgen.metadata_characters(chinese)
+        self.assertTrue(set("夜に駆ける宇多田ヒカル봄날방탄소년단보고싶다ㅋㅋ") <= metadata)
+        self.assertEqual(sum(0xAC00 <= ord(ch) <= 0xD7A3
+                             for ch in fontgen.korean_characters()), 2350)
+        self.assertTrue(chinese <= metadata)
+        for size in (9, 12, 24):
+            self.assertEqual(fontgen.characters_for_size(size, set("音乐"), chinese, metadata), metadata)
+        for size in (10, 14):
+            self.assertEqual(fontgen.characters_for_size(size, set("音乐"), chinese, metadata), chinese)
+        for size in (8, 13, 17, 18, 22):
+            self.assertEqual(fontgen.characters_for_size(size, set("音乐"), chinese, metadata), set("音乐"))
+        with tempfile.TemporaryDirectory(prefix="folo-multilingual-font-test-") as tmp:
+            with patch.object(fontgen, "FONT_DIR", Path(tmp)):
+                for size in (9, 12, 25):
+                    info = fontgen.generate("metadata_%d" % size, size,
+                        fontgen.SERIF if size == 25 else fontgen.SANS,
+                        set("夜に駆ける宇多田ヒカル봄날방탄소년단보고싶다ㅋㅋ"))
+                    self.assertEqual(info["fitted_glyphs"], 0)
+
     def test_compression_round_trip(self):
         rng = random.Random(20261028)
         for count in (0, 1, 2, 12, 73, 1000):
